@@ -12,13 +12,13 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="tadqeeq",
-    version="0.1.0",
+    version="0.1.1",
     author="Mohamed Behery",
-    author_email="mohamed-behery@outlook.com",
+    author_email="mohamed.i.behery@proton.me",
     description="An interactive PyQt5 image annotation tool for segmentation masks and bounding boxes.",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/m-behery/tadqeeq",
+    url="https://github.com/orbits-it/tadqeeq",
     packages=find_packages(include=["tadqeeq", "tadqeeq.*"]),
     package_dir={"": "."},
     include_package_data=True,
