@@ -1,3 +1,48 @@
+Metadata-Version: 2.4
+Name: tadqeeq
+Version: 0.1.1
+Summary: An interactive PyQt5 image annotation tool for segmentation masks and bounding boxes.
+Home-page: https://github.com/orbits-it/tadqeeq
+Author: Mohamed Behery
+Author-email: mohamed.i.behery@proton.me
+Classifier: Programming Language :: Python :: 3.11
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Intended Audience :: Developers
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: Scientific/Engineering :: Artificial Intelligence
+Classifier: Topic :: Scientific/Engineering :: Image Recognition
+Requires-Python: >=3.8, <3.12
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: imageio==2.37.0
+Requires-Dist: lazy_loader==0.4
+Requires-Dist: networkx==3.4.2
+Requires-Dist: numpy==2.2.5
+Requires-Dist: packaging==25.0
+Requires-Dist: pillow==11.2.1
+Requires-Dist: PyQt5==5.15.11
+Requires-Dist: PyQt5-Qt5==5.15.16
+Requires-Dist: PyQt5_sip==12.17.0
+Requires-Dist: scikit-image==0.25.2
+Requires-Dist: scipy==1.15.2
+Requires-Dist: tifffile==2025.3.30
+Provides-Extra: dev
+Requires-Dist: build; extra == "dev"
+Requires-Dist: twine; extra == "dev"
+Requires-Dist: wheel; extra == "dev"
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: license-file
+Dynamic: provides-extra
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
+
 # Tadqeeq – Image Annotator Tool
 
 An interactive image annotation tool built with **PyQt5**, designed for efficient labeling of **segmentation masks** and **bounding boxes**.
@@ -108,11 +153,9 @@ See [LICENSE](./LICENSE) for the full license text.
 
 ---
 
-## 💡 Acknowledgements
+## 🙏 Acknowledgements
 
-🎉 Built for computer vision practitioners needing fast, mouse-based labeling with clean overlays and autosave logic.
-
-🌟 Special thanks to **PyQt5** for providing the powerful and flexible GUI toolkit that made the development of this interactive image annotator possible.
+Built for computer vision practitioners needing fast, mouse-based labeling with clean overlays and autosave logic.
 
 ---
 
