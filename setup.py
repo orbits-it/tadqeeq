@@ -12,7 +12,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="tadqeeq",
-    version="1.1.3",
+    version="1.1.4",
     author="Mohamed Behery",
     author_email="mohamed.i.behery@proton.me",
     description="An interactive PyQt5 image annotation tool for segmentation masks and bounding boxes.",
@@ -52,7 +52,7 @@ setup(
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
         "Topic :: Scientific/Engineering :: Image Recognition",
     ],
-    python_requires=">=3.8, <3.12",
+    python_requires=">=3.8",
     entry_points={
         "console_scripts": [
             "tadqeeq=tadqeeq.cli:main",
