@@ -10,8 +10,8 @@ An interactive image annotation tool built with **PyQt5**, designed for efficien
 
 ## 🚀 Features
 
-- ✅ **Interactive GUI** for image annotation with the mouse
-- 🖌️ **Scroll between label classes** with the mouse wheel
+- ✅ **Minimalist Interactive Design**
+- 🖌️ **Scroll through label classes / Adjust pen size** with the mouse wheel
 - 🎨 **Supports segmentation masks (.png)** and **bounding boxes (.txt)**
 - 🧠 **Dynamic label color generation** (HSV-based)
 - 💬 **Floating labels** showing hovered and selected classes
@@ -53,10 +53,10 @@ from tadqeeq import ImageAnnotator
 tadqeeq path/to/image.jpg path/to/annotations[.png|.txt]
 ```
 
-> **Note:**  
-> - If `annotations.png` is a `.png` file, the tool uses **segmentation masks** with class-labeled pixels on a white background.  
-> - If it's a `.txt` file, it uses **YOLO-style bounding boxes** formatted as:  
->   `label_index x_offset y_offset width height`
+> **Note:**
+> If the annotations file is PNG one, the tool uses **segmentation masks** with class-labeled pixels on a white background.  
+> If it's a `.txt` file, it uses **YOLO-style bounding boxes** formatted as:  
+>> `label_index x_offset y_offset width height`
 
 ---
 
@@ -65,10 +65,10 @@ tadqeeq path/to/image.jpg path/to/annotations[.png|.txt]
 | Action                  | Mouse/Key |
 |-------------------------|-----------|
 | Draw / Fill segment     | Left-click / double-click |
-| Erase (one object)      | Middle-click + Left-click |
-| Toggle erase mode       | Middle-click |
-| Clear all               | Double middle-click |
-| Scroll through labels   | Mouse wheel |
+| Erase (one object)      | Right-click + Left-click |
+| Toggle erase mode       | Right-click |
+| Clear all               | Double right-click |
+| Scroll through labels / Adjust pen size   | Mouse wheel |
 | Save annotations        | Ctrl+S |
 | Show label on hover     | Hover cursor |
 

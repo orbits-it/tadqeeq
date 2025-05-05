@@ -59,6 +59,8 @@ class ImageAnnotator(QWidget):
                  opacity=0.5,
                  label_slider_sensitivity=0.30,
                  label_color_pairs=32,
+                 pen_width_slider_sensitivity=0.05,
+                 maximum_pen_width_multiplier=3.0,
                  floating_label_display_offsets=(15,30),
                  bounding_box_side_length_thresholds=(25,2000),
                  overlap_vs_smallest_area_threshold=0.95,
@@ -140,7 +142,11 @@ class ImageAnnotator(QWidget):
             self.__overlap_vs_union_area_threshold = overlap_vs_union_area_threshold
             self.__corner_label_attached_to_bounding_box = corner_label_attached_to_bounding_box
         
-        def initialize_label_slider():
+        def initialize_sliders():
+            self.__label_slider_enabled = True
+            self.__pen_width_slider_sensitivity = pen_width_slider_sensitivity
+            self.maximum_pen_width_multiplier = maximum_pen_width_multiplier
+            self.pen_width_multiplier_accumulator = 0.0
             self.__label_slider_sensitivity = label_slider_sensitivity
             self.label_color_pairs = label_color_pairs
             self.label_index_accumulator = 0.0
@@ -165,9 +171,17 @@ class ImageAnnotator(QWidget):
         initialize_annotation_pen()
         configure_annotation_parameters()
         configure_bounding_boxes()
-        initialize_label_slider()
+        initialize_sliders()
         load_image_annotation_pair()
         enable_mouse_tracking()
+        
+    @property
+    def maximum_pen_width_multiplier(self):
+        return self.__maximum_pen_width_multiplier
+    
+    @maximum_pen_width_multiplier.setter
+    def maximum_pen_width_multiplier(self, value):
+        self.__maximum_pen_width_multiplier = value
     
     @property
     def verbose(self):
@@ -455,7 +469,7 @@ class ImageAnnotator(QWidget):
         Sets the labelled segment masks, sorts them by segment area, and updates the overall segment mask.
         
         This setter method:
-        - Computes the areas of each segment in the provided `value` array using the `compute_segment_areas` function.
+        - Computes the areas of each segment in the provided `value` array using the `Helper.compute_segment_areas` function.
         - Sorts the segments by their areas in ascending order.
         - Combines the sorted segment masks into a single mask.
         
@@ -479,23 +493,61 @@ class ImageAnnotator(QWidget):
     @label_index_accumulator.setter
     def label_index_accumulator(self, value:float):
         """
-        Sets the label index accumulator and updates the label to annotate.
+        Sets the label index accumulator and updates the active label index for annotation.
         
-        This setter method:
-        - Modifies the value by applying the modulo operation to ensure it stays within the range of available labels.
-        - Updates the `label_index_to_annotate` to reflect the correct label index, ensuring no quantization errors occur due to floating-point precision issues.
-        - Logs the current value of the accumulator and the corresponding label to annotate.
+        Functionality:
+        - Wraps the floating-point accumulator value within the total number of labels using modulo.
+        - Calculates the integer label index to annotate, with a safeguard against floating-point 
+          quantization errors (e.g., ensuring 31.999999... correctly maps to 31 when flooring, not 32).
+        - If label slider mode is enabled, logs the label index and corresponding label name.
         
-        Args:
-            value (float): The new value to set for the label index accumulator. It will be wrapped to ensure it stays within the valid range of label indices.
-        
-        Notes:
-            - The value is wrapped within the range `[0, n_labels)` using modulo arithmetic to avoid out-of-bounds errors.
-            - The setter ensures that the label index is correctly updated, even when floating-point precision issues might otherwise cause errors in flooring.
+        Parameters:
+            value (float): The new value for the label index accumulator, which can be fractional 
+                           to allow smooth scrolling or adjustments.
         """
         self.__label_index_accumulator = value % self.n_labels
         self.label_index_to_annotate = int(value % self.n_labels) % self.n_labels # To avoid quantization error issues when flooring (e.g. 31.99999999999 gives 32 not 31)
-        self.log(f'{self.__label_index_accumulator:.2f}: {self.label_index_to_annotate + 1}/{self.n_labels}, {self.labels[self.label_to_annotate]}')
+        if self.__label_slider_enabled: # Not to depend on the order of initialization
+            self.log(f'Label Slider: {self.__label_index_accumulator:.2f}: {self.label_index_to_annotate + 1}/{self.n_labels}, {self.labels[self.label_to_annotate]}')
+      
+    @property
+    def pen_width_multiplier_accumulator(self):
+        """Floating-point accumulator for pen width scrolling."""
+        return self.__pen_width_multiplier_accumulator
+    
+    @pen_width_multiplier_accumulator.setter
+    def pen_width_multiplier_accumulator(self, value:float):
+        """
+        Sets the pen width multiplier accumulator and updates the effective pen width.
+        
+        Functionality:
+        - Clamps the accumulator value to the [0.0, 1.0] range.
+        - Computes the actual pen width multiplier based on the clamped value and the maximum allowed multiplier.
+        - Logs the updated pen width multiplier if the label slider mode is not enabled (to avoid unintended logs during initialization or label adjustments).
+        
+        Parameters:
+            value (float): A normalized value (typically between 0 and 1) representing the percentage of desired maximum pen width multiplier to be applied for pen resizing.
+        """
+        self.__pen_width_multiplier_accumulator = 0.0 if value < 0.0 else 1.0 if value > 1.0 else value
+        self.pen_width_multiplier = 1 + self.__pen_width_multiplier_accumulator * (self.maximum_pen_width_multiplier - 1)
+        if not self.__label_slider_enabled: # Not to depend on the order of initialization
+            self.log(f'Pen Width Slider: {self.pen_width_multiplier:.2f}')
+        
+    @property
+    def pen_width_multiplier(self):
+        """The current multiplier applied to the base pen width."""
+        return self.__pen_width_multiplier
+    
+    @pen_width_multiplier.setter
+    def pen_width_multiplier(self, value:float):
+        """
+        Sets the pen width multiplier and resizes the annotation pen accordingly.
+    
+        Parameters:
+            value (float): The new pen width multiplier to apply.
+        """
+        self.__pen_width_multiplier = value
+        self.__resize_pen()
         
     def save(self):
         """
@@ -647,18 +699,20 @@ class ImageAnnotator(QWidget):
     
     def __combine_layers_and_update_image_display(self):
         """
-        Combines the base image and the drawing layer, then updates the image display.
+        Combines the base image, drawing layer, and optional pen tracer overlay into a single QPixmap,
+        then updates the image display widget.
     
-        The method creates a compound image by combining the original image with the drawing layer:
-        - It creates a `QPixmap` from the base image.
-        - It uses a `QPainter` to draw the drawing layer on top of the base image.
-        - The combined image is then set to the display widget to update the view.
-    
-        This method is used to reflect changes in the drawing or annotations on the image display.
+        This method performs the following steps:
+        - Creates a compound QPixmap from the original image.
+        - Uses QPainter to draw the current drawing layer onto the compound image.
+        - Optionally draws an additional pen tracer overlay when it exists.
+        - Updates the GUI's image display with the resulting composed image.
         """
         compound_layer = QPixmap(self.image)
         painter = QPainter(compound_layer)
         painter.drawPixmap(0, 0, self.drawing)
+        if hasattr(self, '_ImageAnnotator__pen_tracer_overlay'):
+            painter.drawPixmap(0, 0, self.__pen_tracer_overlay)
         painter.end()
         self.__image_display.setPixmap(compound_layer)
         
@@ -887,13 +941,13 @@ class ImageAnnotator(QWidget):
         """
         Dynamically adjust the drawing pen width based on window size.
         
-        - Scales the annotation pen width proportionally relative to the initial minimum widget width.
+        - Scales the annotation pen width proportionally relative to the initial minimum widget width and the pen width multiplier.
         - Ensures that the pen stays visually consistent across different window resize events.
         """
         widget_minimum_width = self.minimumWidth()
         if widget_minimum_width:
             ratio = self.width() / widget_minimum_width
-            self.__annotation_pen.setWidthF(ratio * self.__minimum_pen_width)
+            self.__annotation_pen.setWidthF(ratio * self.__minimum_pen_width * self.pen_width_multiplier)
     
     def resizeEvent(self, event):
         """
@@ -915,36 +969,60 @@ class ImageAnnotator(QWidget):
     
     def wheelEvent(self, event):
         """
-        Handle mouse wheel events to scroll through label classes.
+        Handles mouse wheel events to modify either label selection or pen width, 
+        depending on the current mode.
         
-        - When the user scrolls, adjust the label index accumulator based on scroll direction.
-        - If in erasing mode, disable erasing before changing labels.
-        - Updates the floating label displays after switching labels.
+        Behavior:
+        - If erasing mode is active, it is disabled.
+        - If label slider mode is enabled:
+            - Adjusts the label index accumulator based on the wheel direction and sensitivity.
+            - Updates the label display accordingly.
+        - Otherwise:
+            - Adjusts the pen width accumulator based on the wheel direction and sensitivity.
         
-        Args:
-            event (QWheelEvent): The mouse wheel event containing scroll direction information.
+        After handling the wheel input, this method updates the pen tracer overlay 
+        and refreshes the image display.
+        
+        Parameters:
+            event (QWheelEvent): The wheel event triggered by user input.
         """
         if self.erasing:
             self.__erasing = False
         delta = event.angleDelta().y()
-        delta = self.__label_slider_sensitivity * np.sign(delta)
-        self.label_index_accumulator += delta
-        self.__update_label_displays()
+        if self.__label_slider_enabled:
+            delta = self.__label_slider_sensitivity * np.sign(delta)
+            self.label_index_accumulator += delta
+            self.__update_label_displays()
+        else:
+            delta = self.__pen_width_slider_sensitivity * np.sign(delta)
+            self.pen_width_multiplier_accumulator += delta
+        self.__update_pen_tracer_overlay()
+        self.__combine_layers_and_update_image_display()
     
     def mousePressEvent(self, event):
         """
-        Handles mouse press events, performing different actions based on the button pressed.
+        Handles mouse press events to manage annotation drawing, erasing, and UI mode toggling.
         
-        If the left mouse button is pressed:
-            - If erasing is enabled, it drops the smallest annotation hovered over and retraces annotations.
-            - Updates the label display and autosaves if enabled.
-            - Otherwise, it draws a point at the pressed position.
+        Behavior depends on the mouse button pressed:
+        - Left Button:
+            - If in erasing mode, attempts to remove the smallest annotation under the cursor.
+              If an annotation is removed:
+                - Retraces annotations.
+                - Updates the annotated label display.
+                - Optionally triggers autosave if enabled.
+            - Otherwise, draws a point annotation at the cursor position.
+            - In both cases, updates the combined image display.
         
-        If the middle mouse button is pressed:
-            - Toggles the erasing state on or off.
+        - Right Button:
+            - Toggles the erasing mode.
+            - Updates the pen tracer overlay and refreshes the image and label displays.
         
-        Args:
-            event (QMouseEvent): The event object containing details about the mouse press.
+        - Middle Button:
+            - Toggles the label slider mode (used for navigating label indices).
+            - Updates the pen tracer overlay and refreshes the image display.
+        
+        Parameters:
+            event (QMouseEvent): The mouse press event containing button and position data.
         """
         if event.button() == Qt.LeftButton:
             if self.__erasing:
@@ -957,8 +1035,50 @@ class ImageAnnotator(QWidget):
             else:
                 self.__draw(event.pos(), 'point')
             self.__combine_layers_and_update_image_display()
-        elif event.button() == Qt.MiddleButton:
+        elif event.button() == Qt.RightButton:
             self.__erasing ^= True
+            self.__update_pen_tracer_overlay()
+            self.__combine_layers_and_update_image_display()
+            self.__update_label_displays()
+        elif event.button() == Qt.MiddleButton:
+            self.__label_slider_enabled ^= True
+            self.__update_pen_tracer_overlay()
+            self.__combine_layers_and_update_image_display()
+            
+            
+    def __update_pen_tracer_overlay(self):
+        """
+        Updates the pen tracer overlay used to visually indicate the pen position and size on the image.
+    
+        Functionality:
+        - If no previous pen position is recorded, the method exits early.
+        - Initializes a transparent QPixmap the same size as the image to serve as the overlay.
+        - If in erasing mode, the overlay is left blank and the method returns.
+        - Otherwise, draws a circle (tracer) at the last pen position to indicate where and how large 
+          the next annotation will be.
+            - If label slider mode is active, uses the current label color for the tracer.
+            - Otherwise, uses a black pen.
+        - The tracer's size reflects the current pen width adjusted by scaling factors.
+    
+        This method is called whenever visual feedback about the drawing tool is needed,
+        such as when the pen size or position changes.
+        """
+        if self.__last_pen_position is None:
+            return
+        self.__pen_tracer_overlay = QPixmap(self.image.size())
+        self.__pen_tracer_overlay.fill(Qt.transparent)
+        if self.__erasing:
+            return
+        painter = QPainter(self.__pen_tracer_overlay)
+        if self.__label_slider_enabled:
+            pen = QPen(self.label_colors[self.label_index_to_annotate], 1)
+        else:
+            pen = QPen(Qt.black, 1)
+        painter.setPen(pen)
+        pen_width = self.__annotation_pen.widthF()
+        width = pen_width - 6 * self.pen_width_multiplier * self.__scale_factor
+        painter.drawEllipse(self.__last_pen_position, width, width)
+        painter.end()
         
     def mouseMoveEvent(self, event):
         """
@@ -984,7 +1104,8 @@ class ImageAnnotator(QWidget):
                         self.save()
             else:
                 self.__draw(event.pos(), 'line')
-            self.__combine_layers_and_update_image_display()
+        self.__update_pen_tracer_overlay()
+        self.__combine_layers_and_update_image_display()
         self.__update_label_displays()
         self.__last_pen_position = event.pos()
         
@@ -992,11 +1113,11 @@ class ImageAnnotator(QWidget):
         """
         Handles mouse double-click events, performing different actions based on the button pressed.
         
-        If the middle mouse button is pressed:
+        If the right mouse button is double-clicked:
             - Prompts the user with a warning message asking for confirmation to clear annotations.
             - If confirmed, clears all annotations and disables erasing mode.
         
-        If the left mouse button is pressed and erasing is not active:
+        If the left mouse button is double-clicked and erasing is not active:
             - Performs a flood-fill algorithm to locate all connected pixels starting from the double-clicked position.
             - If bounding boxes are used, checks the size of the bounding box and adds it to the list if it meets the size thresholds.
             - If bounding boxes are not used, creates and labels a segment mask, and adds it to the list of labelled segment masks.
@@ -1007,7 +1128,7 @@ class ImageAnnotator(QWidget):
             event (QMouseEvent): The event object containing details about the mouse double-click.
         """
         updated = False
-        if event.button() == Qt.MiddleButton:
+        if event.button() == Qt.RightButton:
             response = QMessageBox.warning(self, 'Clear Drawing?', 'You are about to clear your annotations for this image!', QMessageBox.Ok | QMessageBox.Cancel, QMessageBox.Cancel)
             if response == QMessageBox.Ok:
                 self.__clear_annotations()
