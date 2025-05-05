@@ -1045,7 +1045,6 @@ class ImageAnnotator(QWidget):
             self.__update_pen_tracer_overlay()
             self.__combine_layers_and_update_image_display()
             
-            
     def __update_pen_tracer_overlay(self):
         """
         Updates the pen tracer overlay used to visually indicate the pen position and size on the image.
@@ -1056,7 +1055,7 @@ class ImageAnnotator(QWidget):
         - If in erasing mode, the overlay is left blank and the method returns.
         - Otherwise, draws a circle (tracer) at the last pen position to indicate where and how large 
           the next annotation will be.
-            - If label slider mode is active, uses the current label color for the tracer.
+            - If label slider mode is not active, uses the current label color for the tracer.
             - Otherwise, uses a black pen.
         - The tracer's size reflects the current pen width adjusted by scaling factors.
     
@@ -1070,7 +1069,7 @@ class ImageAnnotator(QWidget):
         if self.__erasing:
             return
         painter = QPainter(self.__pen_tracer_overlay)
-        if self.__label_slider_enabled:
+        if not self.__label_slider_enabled:
             pen = QPen(self.label_colors[self.label_index_to_annotate], 1)
         else:
             pen = QPen(Qt.black, 1)
