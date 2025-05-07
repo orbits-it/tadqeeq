@@ -9,6 +9,7 @@ import numpy as np
 from PyQt5.QtGui import QPixmap, QImage
 from collections import deque
 from itertools import combinations
+import os
 
 def compute_segment_areas(labelled_segment_masks):
     """
@@ -272,3 +273,13 @@ def locate_all_pixels_via_floodfill(rgb_array:np.ndarray, yx_root:tuple):
         traversal_candidates.extendleft(get_valid_neighbors(yx_candidate))
         traversed_pixels_mask[*yx_candidate] = True
     return traversed_pixels_mask
+
+def get_pixmap_compatible_image_filepaths(images_directory_path):
+    valid_extensions = {
+        '.png', '.jpg', '.jpeg', '.bmp', '.gif',
+        '.ppm', '.pgm', '.pbm', '.xbm', '.xpm'
+    }
+    filepaths = [os.path.join(images_directory_path, filename) for filename in os.listdir(images_directory_path)]
+    check_filepath = lambda filepath: os.path.isfile(filepath) and os.path.splitext(filepath)[-1] in valid_extensions
+    valid_filepaths = list(filter(check_filepath, filepaths))
+    return valid_filepaths
