@@ -617,7 +617,17 @@ class ImageAnnotator(QWidget):
         self.__combine_layers_and_update_image_display()
         self.__update_label_displays()
         
-    def __pen_user_interface_update_routine(self):
+    def __cursor_user_interface_update_routine(self):
+        """
+        Updates the user interface to reflect the current cursor state.
+        
+        This method performs the following updates:
+        - Refreshes the pen tracer overlay to indicate the current pen size and location.
+        - Redraws the combined image layers (original image, annotation, and overlay).
+        - Updates the label displays to show the active label and the label under the cursor (if any).
+        
+        Typically called after mouse movement or tool mode changes to ensure visual consistency.
+        """
         self.__update_pen_tracer_overlay()
         self.__combine_layers_and_update_image_display()
         self.__update_label_displays()
@@ -1086,7 +1096,7 @@ class ImageAnnotator(QWidget):
         If the left mouse button is held down:
             - If erasing is enabled, it attempts to drop the smallest annotation hovered over and retraces annotations.
             - Otherwise, it draws a line based on the mouse movement.
-            - Combines layers and updates the image display.
+            - Refreshes the cursor.
             
         Additionally, updates the label displays and tracks the last position of the pen.
         
@@ -1105,7 +1115,7 @@ class ImageAnnotator(QWidget):
             else:
                 self.__draw(current_pen_position, 'line')
         self.last_pen_position = current_pen_position
-        self.__pen_user_interface_update_routine()
+        self.__cursor_user_interface_update_routine()
         
     def __update_yx_cursor_within_original_image(self, position:QPoint):
         if position is None:

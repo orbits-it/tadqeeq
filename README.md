@@ -16,7 +16,7 @@ An interactive image annotation tool built with **PyQt5**, designed for efficien
 - 🧠 **Dynamic label color generation** (HSV-based)
 - 💬 **Floating labels** showing hovered and selected classes
 - 💾 **Auto-save** and **manual save** (Ctrl+S)
-- 🧽 **Flood-fill segmentation**
+- 🧽 **Flood-fill segmentation** with a postprocessing stage of **binary hole filling**
 - 🚫 **Middle-click erase mode** and **double-click to clear all**
 
 ---
@@ -50,7 +50,7 @@ from tadqeeq import ImageAnnotator
 ### Run demo from command line (if installed via pip):
 
 ```bash
-tadqeeq path/to/image.jpg path/to/annotations[.png|.txt]
+tadqeeq [--autosave|--use_bounding_boxes]* <images_directory_path> <annotations_directory_path>
 ```
 
 > **Note:**
@@ -71,6 +71,7 @@ tadqeeq path/to/image.jpg path/to/annotations[.png|.txt]
 | Scroll through labels / Adjust pen size   | Mouse wheel |
 | Save annotations        | Ctrl+S |
 | Show label on hover     | Hover cursor |
+| Navigate through images (CLI only) | A / D |
 
 ---
 
@@ -82,7 +83,8 @@ root/
 |   ├── __init__.py         # Entry point for importing
 |   ├── widgets.py          # Contains ImageAnnotator class
 |   ├── utils.py            # Helper methods (flood fill, bounding box logic)
-|   ├── cli.py              # Optional CLI entry point
+|   ├── implementations.py  # Contains an example integration of ImageAnnotator class
+|   ├── cli.py              # Entry point for full solution
 ├── README.md
 ├── LICENSE
 ├── setup.py
