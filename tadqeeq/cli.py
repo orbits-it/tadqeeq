@@ -16,7 +16,7 @@ def main():
         sys.exit(1)
     
     images_directory_path, annotations_directory_path = sys.argv[-2:]
-    if not os.path.isdir():
+    if not os.path.isdir(images_directory_path):
         print(f'Error: The directory "{images_directory_path}" does not exist.')
         sys.exit(2)
     
