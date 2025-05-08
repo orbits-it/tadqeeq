@@ -8,7 +8,7 @@ An interactive image annotation tool built with **PyQt5**, designed for efficien
 
 ---
 
-## 🚀 Features
+## 🚀 Widget Features
 
 - ✅ **Minimalist Interactive Design**
 - 🖌️ **Scroll through label classes / Adjust pen size** with the mouse wheel
@@ -17,7 +17,12 @@ An interactive image annotation tool built with **PyQt5**, designed for efficien
 - 💬 **Floating labels** showing hovered and selected classes
 - 💾 **Auto-save** and **manual save** (Ctrl+S)
 - 🧽 **Flood-fill segmentation** with a postprocessing stage of **binary hole filling**
-- 🚫 **Middle-click erase mode** and **double-click to clear all**
+- 🚫 **Right-click erase mode** and **double-click to clear all**
+
+## 🚀 CLI Features
+
+- ✅ **Minimalist Design**
+- 🎨 **Navigate through images** using A and D.
 
 ---
 
@@ -47,16 +52,17 @@ pip install -r requirements.txt
 from tadqeeq import ImageAnnotator
 ```
 
-### Run demo from command line (if installed via pip):
+### Run CLI tool from command line (if installed via pip):
 
 ```bash
 tadqeeq [--autosave|--use_bounding_boxes]* <images_directory_path> <annotations_directory_path>
 ```
 
-> **Note:**
-> If the annotations file is PNG one, the tool uses **segmentation masks** with class-labeled pixels on a white background.  
-> If it's a `.txt` file, it uses **YOLO-style bounding boxes** formatted as:  
->> `label_index x_offset y_offset width height`
+**Notes:**
+    1. Use A and D to navigate through images.
+    2. If "--use_bounding_boxes" is included:
+        a) the annotations files are PNG for **segmentation masks** with class-labeled pixels on a white background.
+        b) the annotations files are txt for **YOLO-style bounding boxes** formatted as: `label_index x_offset y_offset width height`
 
 ---
 
