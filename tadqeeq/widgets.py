@@ -16,10 +16,10 @@ from skimage.io import imsave
 from skimage.transform import resize
 from scipy.ndimage import binary_fill_holes
 
-from .utils import compute_segment_areas, rgba_array_to_pixmap, \
-                   apply_lut_replacement, detect_overlapping_boxes_to_clean, \
-                   mask_to_bounding_box, pixmap_to_rgba_array, \
-                   locate_all_pixels_via_floodfill
+from utils import compute_segment_areas, rgba_array_to_pixmap, \
+                  apply_lut_replacement, detect_overlapping_boxes_to_clean, \
+                  mask_to_bounding_box, pixmap_to_rgba_array, \
+                  locate_all_pixels_via_floodfill
                   
 from warnings import filterwarnings
 filterwarnings('ignore', category=UserWarning, message='.*low contrast image.*')

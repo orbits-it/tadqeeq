@@ -9,8 +9,9 @@ from PyQt5.QtWidgets import QMainWindow
 from PyQt5.QtCore import Qt, QTimer
 import os
 from collections.abc import Iterable
-from .widgets import ImageAnnotator
-from .utils import get_pixmap_compatible_image_filepaths
+from widgets import ImageAnnotator
+from utils import get_pixmap_compatible_image_filepaths
+from time import sleep
 
 class ImageAnnotatorWindow(QMainWindow):
     """
@@ -44,7 +45,7 @@ class ImageAnnotatorWindow(QMainWindow):
                  images_directory_path,
                  annotations_directory_path,
                  use_bounding_boxes=False,
-                 image_navigation_keys=[Qt.Key_A, Qt.Key_D],
+                 image_navigation_keys=(Qt.Key_A, Qt.Key_D),
                  **image_annotator_kwargs):
         """
         Initializes the main window of the Tadqeeq image annotation tool.
@@ -323,11 +324,23 @@ class ImageAnnotatorWindow(QMainWindow):
         self.__resize_scheduler.start(
             self.__image_annotator.RESIZE_DELAY
         )
+        event.accept()
         
     def __resize_user_interface_update_routine(self):
         """
         Resizes the main window to match the size of the `ImageAnnotator` widget.
         
         This is triggered after a delay to avoid performance issues during continuous resizing.
+        
+        Note:
+            A very short sleep (1 ms) is inserted as a workaround to allow the
+            widget layout and internal sizes (especially of child widgets like
+            `ImageAnnotator`) to stabilize before querying their size.
+            
+            This is a relatively harmless hack that disrupts the main thread 
+            for 1ms and would be better if replaced with a more reliable 
+            solution involving layout synchronization or event queuing via 
+            QTimer. Otherwise, it should not be removed.
         """
+        sleep(0.001) # Hack to allow the resizing of internal components to stabilize
         self.resize(self.__image_annotator.size())
