@@ -278,7 +278,7 @@ class ImageAnnotator(QWidget):
             self.__labels = list(self.__label_color_pairs.keys())
             self.__label_colors = list(self.__label_color_pairs.values())
             self.__n_labels = len(self.__labels)
-        except TypeError:
+        except (ValueError, TypeError):
             if isinstance(value, Iterable):
                 self.labels = list(value)
             elif type(value) is int:
@@ -527,7 +527,7 @@ class ImageAnnotator(QWidget):
         self.__label_index_accumulator = value % self.n_labels
         self.label_index_to_annotate = int(value % self.n_labels) % self.n_labels # To avoid quantization error issues when flooring (e.g. 31.99999999999 gives 32 not 31)
         if self.__label_slider_enabled: # Not to depend on the order of initialization
-            self.log(f'Label Slider: {self.__label_index_accumulator:.2f}: {self.label_index_to_annotate + 1}/{self.n_labels}, {self.labels[self.label_to_annotate]}')
+            self.log(f'Label Slider: {self.__label_index_accumulator:.2f}: {self.label_index_to_annotate + 1}/{self.n_labels}, {self.label_to_annotate}')
       
     @property
     def pen_width_multiplier_accumulator(self):
