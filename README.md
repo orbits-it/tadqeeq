@@ -55,7 +55,7 @@ from tadqeeq import ImageAnnotator
 ### Run CLI tool from command line (if installed via pip):
 
 ```bash
-tadqeeq [--autosave|--use_bounding_boxes]* <images_directory_path> <annotations_directory_path>
+tadqeeq [--verbose|--autosave|--use_bounding_boxes]* <images_directory_path> <annotations_directory_path> <class_names_path>
 ```
 
 **Notes:**

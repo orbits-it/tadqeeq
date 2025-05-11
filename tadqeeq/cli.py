@@ -16,19 +16,29 @@ images_directory_path, annotations_directory_path = f'{root_directory_path}/imag
 def main():
     
     if len(sys.argv) < 3:
-        print("Usage: tadqeeq [--autosave|--use_bounding_boxes]* <images_directory_path> <annotations_directory_path>")
+        print("Usage: tadqeeq [--enable_logging|--autosave|--use_bounding_boxes]* <images_directory_path> <annotations_directory_path> <class_names_path>")
         sys.exit(1)
     
-    images_directory_path, annotations_directory_path = sys.argv[-2:]
+    images_directory_path, annotations_directory_path = sys.argv[-3:-1]
     if not os.path.isdir(images_directory_path):
         print(f'Error: The directory "{images_directory_path}" does not exist.')
         sys.exit(2)
+        
+    class_names_path = sys.argv[-1]
+    if not os.path.isfile(class_names_path):
+        print(f'Error: The file "{class_names_path}" does not exist.')
+        sys.exit(3)
+    
+    with open(class_names_path) as file:
+        class_names = [line.strip() for line in file.readlines() if line.strip()]
     
     app = QApplication(sys.argv)
     window = ImageAnnotatorWindow(
         images_directory_path, annotations_directory_path,
+        label_color_pairs=class_names,
         use_bounding_boxes='--use_bounding_boxes' in sys.argv,
-        autosave='--autosave' in sys.argv
+        autosave='--autosave' in sys.argv,
+        verbose='--verbose' in sys.argv
     )
     window.show()
     sys.exit(app.exec_())
