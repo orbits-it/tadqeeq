@@ -89,8 +89,8 @@ root/
 |   ├── __init__.py         # Entry point for importing
 |   ├── widgets.py          # Contains ImageAnnotator class
 |   ├── utils.py            # Helper methods (flood fill, bounding box logic)
-|   ├── implementations.py  # Contains an example integration of ImageAnnotator class
-|   ├── cli.py              # Entry point for full solution
+|   ├── implementations.py  # Contains a working example of integrating the ImageAnnotator class within a full minimalist setup
+|   ├── cli.py              # Entry point for a full annotation solution utilizing the code in `implementations.py`
 ├── README.md
 ├── LICENSE
 ├── setup.py

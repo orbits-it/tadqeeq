@@ -129,16 +129,16 @@ class ImageAnnotator(QWidget):
             self.__label_slider_sensitivity = label_slider_sensitivity
             self.label_color_pairs = label_color_pairs
             self.label_index_accumulator = 0.0
-        
-        def load_image_annotation_pair():
-            self.image_path = image_path
-            self.annotation_path = annotation_path
             
         def enable_mouse_tracking():
             self.setMouseTracking(True)
             self.__image_display.setMouseTracking(True)
             self.__label_to_annotate_display.setMouseTracking(True)
             self.__label_annotated_display.setMouseTracking(True)
+            
+        def load_image_annotation_pair():
+            self.image_path = image_path
+            self.annotation_path = annotation_path
 
         super().__init__()
         
@@ -151,8 +151,8 @@ class ImageAnnotator(QWidget):
         configure_annotation_parameters()
         configure_bounding_boxes()
         initialize_sliders()
-        load_image_annotation_pair()
         enable_mouse_tracking()
+        load_image_annotation_pair()
         
     @property
     def RESIZE_DELAY(cls):
@@ -363,7 +363,34 @@ class ImageAnnotator(QWidget):
         self.__scale_factor = self.width() / self.image.width()
         self.__image = value.scaled(self.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
         self.resize(self.__image.size())
+
+    def resizeEvent(self, event):
+        """
+        Handle window resize events.
+        
+        - Sets the initial minimum widget size based on the first resize.
+        - Rescales the image display to match the new widget size.
+        - Starts a timer to schedule an optimized resize update routine.
+        
+        Args:
+            event (QResizeEvent): The resize event object containing new size info.
+        """
+        if not self.__minimum_widget_size_set:
+            self.setMinimumSize(self.size())
+            self.__minimum_widget_size_set = True
+        self.__image_display.resize(self.size())
+        self.__resize_scheduler.start(self.RESIZE_DELAY)
+        event.accept()
     
+    def __resize_user_interface_update_routine(self):
+        """Handle window resize events, rescaling images and updating annotation layers."""
+        self.__reload_image()
+        self.__retrace_annotations()
+        self.__update_pen_tracer_overlay()
+        self.__combine_layers_and_update_image_display()
+        self.__update_label_displays()
+        self.__resize_pen()
+        
     @property
     def drawing(self):
         """Get the current annotation overlay (QPixmap)."""
@@ -601,15 +628,6 @@ class ImageAnnotator(QWidget):
             masks = self.labelled_segment_masks.copy()
             return reduce(merge, masks).astype('uint8')
         return np.zeros(self.__original_array_shape, 'uint8') + 255
-    
-    def __resize_user_interface_update_routine(self):
-        """Handle window resize events, rescaling images and updating annotation layers."""
-        self.__reload_image()
-        self.__retrace_annotations()
-        self.__update_pen_tracer_overlay()
-        self.__combine_layers_and_update_image_display()
-        self.__update_label_displays()
-        self.__resize_pen()
         
     def __annotate_user_interface_update_routine(self):
         """Update the annotation overlay and label displays after changes."""
@@ -957,24 +975,6 @@ class ImageAnnotator(QWidget):
             ratio = self.width() / widget_minimum_width
             self.__annotation_pen.setWidthF(ratio * self.__minimum_pen_width * self.pen_width_multiplier)
     
-    def resizeEvent(self, event):
-        """
-        Handle window resize events.
-        
-        - Sets the initial minimum widget size based on the first resize.
-        - Rescales the image display to match the new widget size.
-        - Starts a timer to schedule an optimized resize update routine.
-        
-        Args:
-            event (QResizeEvent): The resize event object containing new size info.
-        """
-        if not self.__minimum_widget_size_set:
-            self.setMinimumSize(self.size())
-            self.__minimum_widget_size_set = True
-        self.__image_display.resize(self.size())
-        self.__resize_scheduler.start(self.RESIZE_DELAY)
-        event.accept()
-    
     def wheelEvent(self, event):
         """
         Handles mouse wheel events to modify either label selection or pen width, 
@@ -1053,7 +1053,6 @@ class ImageAnnotator(QWidget):
             self.__label_slider_enabled ^= True
             self.__update_pen_tracer_overlay()
             self.__combine_layers_and_update_image_display()
-            
             
     def __update_pen_tracer_overlay(self):
         """
