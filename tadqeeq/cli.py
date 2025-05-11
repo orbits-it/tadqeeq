@@ -24,12 +24,12 @@ def main():
         print(f'Error: The directory "{images_directory_path}" does not exist.')
         sys.exit(2)
         
-    class_names_path = sys.argv[-1]
-    if not os.path.isfile(class_names_path):
-        print(f'Error: The file "{class_names_path}" does not exist.')
+    class_names_filepath = sys.argv[-1]
+    if not os.path.isfile(class_names_filepath):
+        print(f'Error: The file "{class_names_filepath}" does not exist.')
         sys.exit(3)
     
-    with open(class_names_path) as file:
+    with open(class_names_filepath) as file:
         class_names = [line.strip() for line in file.readlines() if line.strip()]
     
     app = QApplication(sys.argv)

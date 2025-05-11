@@ -55,14 +55,15 @@ from tadqeeq import ImageAnnotator
 ### Run CLI tool from command line (if installed via pip):
 
 ```bash
-tadqeeq [--verbose|--autosave|--use_bounding_boxes]* <images_directory_path> <annotations_directory_path> <class_names_path>
+tadqeeq [--verbose|--autosave|--use_bounding_boxes]* <images_directory_path> <annotations_directory_path> <class_names_filepath>
 ```
 
 **Notes:**
     1. Use A and D to navigate through images.
-    2. If "--use_bounding_boxes" is included:
-        a) the annotations files are PNG for **segmentation masks** with class-labeled pixels on a white background.
-        b) the annotations files are txt for **YOLO-style bounding boxes** formatted as: `label_index x_offset y_offset width height`
+    2. If "--use_bounding_boxes" is included, the annotations files in <images_directory_path> are:
+        a) PNG for **segmentation masks** with class-labeled pixels on a white background.
+        b) txt for **YOLO-style bounding boxes** formatted as: `label_index x_offset y_offset width height`.
+    3. <class_names_filepath> is a txt file containing a list of a class names used in annotating.
 
 ---
 
