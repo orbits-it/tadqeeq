@@ -8,7 +8,7 @@ Licensed under the MIT License.
 from PyQt5.QtWidgets import QApplication
 import sys
 import os
-from implementations import ImageAnnotatorWindow
+from .implementations import ImageAnnotatorWindow
 
 root_directory_path = '/home/mohamed/Projects/segmentation_annotation_tool'
 images_directory_path, annotations_directory_path = f'{root_directory_path}/images', f'{root_directory_path}/annotations'

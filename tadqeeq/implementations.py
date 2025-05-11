@@ -9,8 +9,8 @@ from PyQt5.QtWidgets import QMainWindow
 from PyQt5.QtCore import Qt, QTimer
 import os
 from collections.abc import Iterable
-from widgets import ImageAnnotator
-from utils import get_pixmap_compatible_image_filepaths
+from .widgets import ImageAnnotator
+from .utils import get_pixmap_compatible_image_filepaths
 
 class ImageAnnotatorWindow(QMainWindow):
     """
