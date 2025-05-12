@@ -15,7 +15,7 @@ images_directory_path, annotations_directory_path = f'{root_directory_path}/imag
 
 def main():
     
-    if len(sys.argv) < 3:
+    if len(sys.argv) < 4:
         print("Usage: tadqeeq [--verbose|--autosave|--use_bounding_boxes]* <images_directory_path> <annotations_directory_path> <class_names_filepath>")
         sys.exit(1)
     
