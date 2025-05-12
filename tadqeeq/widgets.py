@@ -83,6 +83,7 @@ class ImageAnnotator(QWidget):
             self.__resize_scheduler = QTimer(self)
             self.__resize_scheduler.setSingleShot(True)
             self.__resize_scheduler.timeout.connect(self.__resize_user_interface_update_routine)
+            self.__currently_resizing = False
             
         def configure_saving_parameters():
             nonlocal self, key_sequence_to_save, autosave
@@ -368,6 +369,7 @@ class ImageAnnotator(QWidget):
         """
         Handle window resize events.
         
+        - Sets the resizing routine flag to prevent `mouseMove` events.
         - Sets the initial minimum widget size based on the first resize.
         - Rescales the image display to match the new widget size.
         - Starts a timer to schedule an optimized resize update routine.
@@ -375,6 +377,7 @@ class ImageAnnotator(QWidget):
         Args:
             event (QResizeEvent): The resize event object containing new size info.
         """
+        self.__currently_resizing = True
         if not self.__minimum_widget_size_set:
             self.setMinimumSize(self.size())
             self.__minimum_widget_size_set = True
@@ -383,13 +386,15 @@ class ImageAnnotator(QWidget):
         event.accept()
     
     def __resize_user_interface_update_routine(self):
-        """Handle window resize events, rescaling images and updating annotation layers."""
+        """Handle window resize events, rescaling images and updating annotation layers. Then, reset the resizing routine flag."""
         self.__reload_image()
         self.__retrace_annotations()
         self.__update_pen_tracer_overlay()
         self.__combine_layers_and_update_image_display()
         self.__update_label_displays()
         self.__resize_pen()
+        self.__currently_resizing = False
+        
         
     @property
     def drawing(self):
@@ -1090,7 +1095,8 @@ class ImageAnnotator(QWidget):
         
     def mouseMoveEvent(self, event):
         """
-        Handles mouse movement events and updates the image display based on cursor position and button states.
+        Handles mouse movement events when not resizing and updates the image display based on cursor position 
+        and button states.
     
         If the left mouse button is held down:
             - If erasing is enabled, it attempts to drop the smallest annotation hovered over and retraces annotations.
@@ -1101,7 +1107,12 @@ class ImageAnnotator(QWidget):
         
         Args:
             event (QMouseEvent): The event object containing details about the mouse movement.
+        
+        Note: It is very necessary to apply this routine while the application is not resizing. Otherwise, an IndexError 
+        exception could occur due to the cursor being mapped to outside the bounds of the original image.
         """
+        if self.__currently_resizing:
+            return
         current_pen_position = event.pos()
         self.__update_yx_cursor_within_original_image(current_pen_position)
         if event.buttons() & Qt.LeftButton:
