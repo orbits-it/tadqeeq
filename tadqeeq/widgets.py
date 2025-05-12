@@ -83,7 +83,7 @@ class ImageAnnotator(QWidget):
             self.__resize_scheduler = QTimer(self)
             self.__resize_scheduler.setSingleShot(True)
             self.__resize_scheduler.timeout.connect(self.__resize_user_interface_update_routine)
-            self.__currently_resizing = False
+            self.__resize_flag = False
             
         def configure_saving_parameters():
             nonlocal self, key_sequence_to_save, autosave
@@ -130,16 +130,16 @@ class ImageAnnotator(QWidget):
             self.__label_slider_sensitivity = label_slider_sensitivity
             self.label_color_pairs = label_color_pairs
             self.label_index_accumulator = 0.0
+        
+        def load_image_annotation_pair():
+            self.image_path = image_path
+            self.annotation_path = annotation_path
             
         def enable_mouse_tracking():
             self.setMouseTracking(True)
             self.__image_display.setMouseTracking(True)
             self.__label_to_annotate_display.setMouseTracking(True)
             self.__label_annotated_display.setMouseTracking(True)
-            
-        def load_image_annotation_pair():
-            self.image_path = image_path
-            self.annotation_path = annotation_path
 
         super().__init__()
         
@@ -152,8 +152,8 @@ class ImageAnnotator(QWidget):
         configure_annotation_parameters()
         configure_bounding_boxes()
         initialize_sliders()
-        enable_mouse_tracking()
         load_image_annotation_pair()
+        enable_mouse_tracking()
         
     @property
     def RESIZE_DELAY(cls):
@@ -237,7 +237,12 @@ class ImageAnnotator(QWidget):
         """
         self.__label_index_to_annotate = value
         self.__label_to_annotate = self.labels[value]
-        self.__annotation_pen.setColor(self.label_colors[value])
+        self.__label_to_annotate_color = self.label_colors[value]
+        
+    @property
+    def label_to_annotate_color(self):
+        """Returns the label color currently selected for annotation."""
+        return self.__label_to_annotate_color
         
     @property
     def label_to_annotate(self):
@@ -364,63 +369,31 @@ class ImageAnnotator(QWidget):
         self.__scale_factor = self.width() / self.image.width()
         self.__image = value.scaled(self.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
         self.resize(self.__image.size())
-
-    def resizeEvent(self, event):
-        """
-        Handle window resize events.
-        
-        - Sets the resizing routine flag to prevent `mouseMove` events.
-        - Sets the initial minimum widget size based on the first resize.
-        - Rescales the image display to match the new widget size.
-        - Starts a timer to schedule an optimized resize update routine.
-        
-        Args:
-            event (QResizeEvent): The resize event object containing new size info.
-        """
-        self.__currently_resizing = True
-        if not self.__minimum_widget_size_set:
-            self.setMinimumSize(self.size())
-            self.__minimum_widget_size_set = True
-        self.__image_display.resize(self.size())
-        self.__resize_scheduler.start(self.RESIZE_DELAY)
-        event.accept()
     
-    def __resize_user_interface_update_routine(self):
-        """Handle window resize events, rescaling images and updating annotation layers. Then, reset the resizing routine flag."""
-        self.__reload_image()
-        self.__retrace_annotations()
-        self.__update_pen_tracer_overlay()
-        self.__combine_layers_and_update_image_display()
-        self.__update_label_displays()
-        self.__resize_pen()
-        self.__currently_resizing = False
-        
-        
     @property
-    def drawing(self):
+    def annotation_overlay(self):
         """Get the current annotation overlay (QPixmap)."""
-        return self.__drawing
+        return self.__annotation_overlay
     
-    @drawing.setter
-    def drawing(self, value:QPixmap):
+    @annotation_overlay.setter
+    def annotation_overlay(self, value:QPixmap):
         """
-        Sets the drawing layer with the provided QPixmap, resizing it to match the size of the image.
+        Sets the annotation layer with the provided QPixmap, resizing it to match the size of the image.
         
         This setter method:
-        - Initializes the internal `__drawing` attribute as a transparent QPixmap with the same size as the image.
-        - Uses a QPainter to draw the provided `value` (a QPixmap) onto the newly created `__drawing`.
-        - The `value` QPixmap is copied onto the transparent layer at position (0, 0), ensuring the drawing is correctly aligned with the image.
+        - Initializes the internal `__annotation_overlay` attribute as a transparent QPixmap with the same size as the image.
+        - Uses a QPainter to draw the provided `value` (a QPixmap) onto the newly created `__annotation_overlay`.
+        - The `value` QPixmap is copied onto the transparent layer at position (0, 0), ensuring the annotation layer is correctly aligned with the image.
         
         Args:
-            value (QPixmap): The QPixmap to set as the drawing layer. This is drawn onto a transparent QPixmap with the size matching the image.
+            value (QPixmap): The QPixmap to set as the annotation layer. This is drawn onto a transparent QPixmap with the size matching the image.
         
         Notes:
-            - The `drawing` layer is reset to a transparent QPixmap each time this setter is called.
-            - The method ensures that the drawing is positioned correctly by using QPainter to render the `value` QPixmap.
+            - The `annotation` layer is reset to a transparent QPixmap each time this setter is called.
+            - The method ensures that the annotation is positioned correctly by using QPainter to render the `value` QPixmap.
         """
-        self.__drawing = QPixmap(self.image.size())
-        self.__drawing.fill(Qt.transparent)
-        painter = QPainter(self.__drawing)
+        self.initialize_overlay('annotation')
+        painter = QPainter(self.__annotation_overlay)
         painter.drawPixmap(0, 0, QPixmap(value))
         painter.end()
     
@@ -633,25 +606,21 @@ class ImageAnnotator(QWidget):
             masks = self.labelled_segment_masks.copy()
             return reduce(merge, masks).astype('uint8')
         return np.zeros(self.__original_array_shape, 'uint8') + 255
+    
+    def __resize_user_interface_update_routine(self):
+        """Handle window resize events, rescaling images and updating annotation layers."""
+        self.__reload_image()
+        self.__retrace_annotations()
+        self.__update_drawing_overlay()
+        self.__update_pen_tracer_overlay()
+        self.__combine_layers_and_update_image_display()
+        self.__update_label_displays()
+        self.__resize_pen()
+        self.__resize_flag = False
         
     def __annotate_user_interface_update_routine(self):
         """Update the annotation overlay and label displays after changes."""
         self.__retrace_annotations()
-        self.__combine_layers_and_update_image_display()
-        self.__update_label_displays()
-        
-    def __cursor_user_interface_update_routine(self):
-        """
-        Updates the user interface to reflect the current cursor state.
-        
-        This method performs the following updates:
-        - Refreshes the pen tracer overlay to indicate the current pen size and location.
-        - Redraws the combined image layers (original image, annotation, and overlay).
-        - Updates the label displays to show the active label and the label under the cursor (if any).
-        
-        Typically called after mouse movement or tool mode changes to ensure visual consistency.
-        """
-        self.__update_pen_tracer_overlay()
         self.__combine_layers_and_update_image_display()
         self.__update_label_displays()
     
@@ -661,7 +630,7 @@ class ImageAnnotator(QWidget):
     
     def __retrace_annotations(self):
         """Clear overlay layer and redraw all annotations (bounding boxes or masks)."""
-        self.drawing = None
+        self.annotation_overlay = None
         if self.__use_bounding_boxes:
             self.__trace_bounding_boxes()
         else:
@@ -671,13 +640,13 @@ class ImageAnnotator(QWidget):
         """
         Draws bounding boxes on the image and optionally labels them with the corresponding label names.
         
-        The method iterates over all the bounding boxes and draws them on the drawing layer:
+        The method iterates over all the bounding boxes and draws them on the annotation layer:
         - Each bounding box is drawn with a color corresponding to its label.
         - If the `corner_label_attached_to_bounding_box` flag is set, the label for the bounding box is displayed at its corner.
         
         The bounding box dimensions are scaled according to the current scale factor, and the label text is displayed with a white font on a background matching the label's color.
         """
-        painter, pen, brush = QPainter(self.drawing), QPen(self.__annotation_pen), QBrush(Qt.Dense7Pattern)
+        painter, pen, brush = QPainter(self.annotation_overlay), QPen(self.__annotation_pen), QBrush(Qt.Dense7Pattern)
         pen.setWidthF(self.__annotation_pen.widthF() / self.__minimum_pen_width)
         if self.corner_label_attached_to_bounding_box:
             font_size = int(self.__label_font_size * self.__scale_factor)
@@ -704,15 +673,15 @@ class ImageAnnotator(QWidget):
     
     def __trace_segments(self):
         """
-        Traces and generates the drawing layer for the segmented image, applying colors based on the labels.
+        Traces and generates the annotation layer for the segmented image, applying colors based on the labels.
         
         This method performs the following steps:
         - Prepares an RGBA lookup table based on the label colors and the opacity setting.
         - Resizes the overall segment mask to match the current image dimensions.
         - Uses the lookup table to map segment mask values to RGBA colors.
-        - Converts the resulting RGBA array into a QPixmap and stores it in the `drawing` attribute.
+        - Converts the resulting RGBA array into a QPixmap and stores it in the `annotation_overlay` attribute.
         
-        The resulting `drawing` is used to display the segmented image with colors corresponding to different labels.
+        The resulting `annotation_overlay` is used to display the segmented image with colors corresponding to different labels.
         """
         def prepare_rgba_lookup_table():
             alpha = int(self.__opacity * 255)
@@ -726,26 +695,39 @@ class ImageAnnotator(QWidget):
         scaled_overall_segment_mask = resize(self.overall_segment_mask, current_array_shape, 0)
         lookup_table = prepare_rgba_lookup_table()
         rgba_array = lookup_table[scaled_overall_segment_mask]
-        self.drawing = rgba_array_to_pixmap(rgba_array)
+        self.annotation_overlay = rgba_array_to_pixmap(rgba_array)
     
     def __combine_layers_and_update_image_display(self):
         """
         Combines the base image, drawing layer, and optional pen tracer overlay into a single QPixmap,
         then updates the image display widget.
-    
+        
         This method performs the following steps:
         - Creates a compound QPixmap from the original image.
         - Uses QPainter to draw the current drawing layer onto the compound image.
-        - Optionally draws an additional pen tracer overlay when it exists.
+        - Draws a drawing overlay after it is initialized.
+        - Draws an additional pen tracer overlay after it is initialized.
         - Updates the GUI's image display with the resulting composed image.
         """
         compound_layer = QPixmap(self.image)
         painter = QPainter(compound_layer)
-        painter.drawPixmap(0, 0, self.drawing)
+        painter.drawPixmap(0, 0, self.annotation_overlay)
+        if hasattr(self, f'_{self.__class__.__name__}__drawing_overlay'):
+            painter.drawPixmap(0, 0, self.drawing_overlay)
         if hasattr(self, f'_{self.__class__.__name__}__pen_tracer_overlay'):
-            painter.drawPixmap(0, 0, self.__pen_tracer_overlay)
+            painter.drawPixmap(0, 0, self.pen_tracer_overlay)
         painter.end()
         self.__image_display.setPixmap(compound_layer)
+        
+    @property
+    def drawing_overlay(self):
+        """Drawing overlay to draw over."""
+        return self.__drawing_overlay
+        
+    @property
+    def pen_tracer_overlay(self):
+        """Tracer overlay to draw the circle over the pen tip."""
+        return self.__pen_tracer_overlay
         
     def __get_mask_for_annotations_hovered_over(self):
         """
@@ -896,8 +878,14 @@ class ImageAnnotator(QWidget):
         if mode not in {'point', 'line'}:
             raise ValueError("The argument `mode` can either take the value of 'point' or 'line'.")
         
-        painter = QPainter(self.drawing)
+        painter = QPainter(self.drawing_overlay)
+        if self.erasing:
+            self.__annotation_pen.setColor(Qt.transparent)
+            painter.setCompositionMode(QPainter.CompositionMode_Clear)
+        else:
+            self.__annotation_pen.setColor(self.label_to_annotate_color)
         painter.setPen(self.__annotation_pen)
+        
         if mode == 'point' or self.__last_pen_position is None:
             painter.drawPoint(current_position)
         else:
@@ -930,19 +918,17 @@ class ImageAnnotator(QWidget):
         label_display.setText(f'Label: {text:<{maximum_text_length}}')
         label_display.setStyleSheet(f'background: {background_color}; border: 1px solid black; padding: 2px;')
         
-    def __update_label_displays(self):
+    def __update_positions_of_label_displays(self):
         """
-        Update and reposition both floating label displays.
-    
-        - Updates the 'Label to Annotate' (current active label) and 'Hovered Label' (label under cursor).
-        - Dynamically repositions the labels based on cursor location or screen corner.
-        - Ensures consistent layout between the two label displays.
+        Updates the on-screen label display elements, including their positions.
+        
+        This method orchestrates:
+        - Positioning of the floating label displays (annotation target label and hovered label),
+          depending on cursor position or fixed layout.
+        
+        Called during cursor updates, label changes, and redraw events to ensure accurate and
+        visually consistent label feedback for the user.
         """
-        self.__label_index_hovered_over = self.__get_label_index_hovered_over()
-        
-        self.__configure_label_display(self.__label_to_annotate_display, self.label_index_to_annotate, False)
-        self.__configure_label_display(self.__label_annotated_display, self.__label_index_hovered_over, True)
-        
         if self.__last_pen_position and self.is_floating_label:
             x_offset = self.__last_pen_position.x() + self.__floating_label_display_offsets[0]
             y_offset = self.__last_pen_position.y() + self.__floating_label_display_offsets[1]
@@ -952,11 +938,43 @@ class ImageAnnotator(QWidget):
         self.__label_to_annotate_display.move(x_offset, y_offset)
         self.__label_annotated_display.move(x_offset, y_offset + self.__label_to_annotate_display.height())
         
+    def __update_contents_of_label_displays(self):
+        """
+        Updates the on-screen label display element contents.
+        
+        This method orchestrates:
+        - Updating the displayed label names and their formatting based on the current annotation
+          label index and the label currently under the cursor.
+        - Ensuring that both label displays share a consistent width after initial configuration.
+        
+        Called during cursor updates, label changes, and redraw events to ensure accurate and
+        visually consistent label feedback for the user.
+        """
+        self.__label_index_hovered_over = self.__get_label_index_hovered_over()
+        self.__configure_label_display(self.__label_to_annotate_display, self.label_index_to_annotate, False)
+        self.__configure_label_display(self.__label_annotated_display, self.__label_index_hovered_over, True)
         if not self.__label_displays_configuration_complete:
             common_width = max(self.__label_to_annotate_display.width(), self.__label_annotated_display.width()) - 25
             self.__label_to_annotate_display.setFixedWidth(common_width - 1)
             self.__label_annotated_display.setFixedWidth(common_width - 1)
             self.__label_displays_configuration_complete = True
+            
+    def __update_label_displays(self):
+        """
+        Updates the on-screen label display elements, including both their content and position.
+        
+        This method orchestrates:
+        - Positioning of the floating label displays (annotation target label and hovered label),
+          depending on cursor position or fixed layout.
+        - Updating the displayed label names and their formatting based on the current annotation
+          label index and the label currently under the cursor.
+        - Ensuring that both label displays share a consistent width after initial configuration.
+        
+        Called during cursor updates, label changes, and redraw events to ensure accurate and
+        visually consistent label feedback for the user.
+        """
+        self.__update_positions_of_label_displays()
+        self.__update_contents_of_label_displays()
             
     def __reconfigure_label_annotated_display(self):
         """
@@ -979,6 +997,25 @@ class ImageAnnotator(QWidget):
         if widget_minimum_width:
             ratio = self.width() / widget_minimum_width
             self.__annotation_pen.setWidthF(ratio * self.__minimum_pen_width * self.pen_width_multiplier)
+    
+    def resizeEvent(self, event):
+        """
+        Handle window resize events.
+        
+        - Sets the initial minimum widget size based on the first resize.
+        - Rescales the image display to match the new widget size.
+        - Starts a timer to schedule an optimized resize update routine.
+        
+        Args:
+            event (QResizeEvent): The resize event object containing new size info.
+        """
+        self.__resize_flag = True
+        if not self.__minimum_widget_size_set:
+            self.setMinimumSize(self.size())
+            self.__minimum_widget_size_set = True
+        self.__image_display.resize(self.size())
+        self.__resize_scheduler.start(self.RESIZE_DELAY)
+        event.accept()
     
     def wheelEvent(self, event):
         """
@@ -1039,15 +1076,14 @@ class ImageAnnotator(QWidget):
         """
         self.__update_yx_cursor_within_original_image(event.pos())
         if event.button() == Qt.LeftButton:
-            if self.__erasing:
+            if self.erasing:
                 updated = self.__drop_smallest_annotation_hovered_over()
                 self.__retrace_annotations()
                 if updated:
                     self.__reconfigure_label_annotated_display()
                     if self.__autosave:
                         self.save()
-            else:
-                self.__draw(event.pos(), 'point')
+            self.__draw(event.pos(), 'point')
             self.__combine_layers_and_update_image_display()
         elif event.button() == Qt.RightButton:
             self.__erasing ^= True
@@ -1058,6 +1094,12 @@ class ImageAnnotator(QWidget):
             self.__label_slider_enabled ^= True
             self.__update_pen_tracer_overlay()
             self.__combine_layers_and_update_image_display()
+            
+    def __update_drawing_overlay(self):
+        if hasattr(self, f'_{self.__class__.__name__}__drawing_overlay'):
+            self.__drawing_overlay = self.drawing_overlay.scaled(self.image.size(), Qt.KeepAspectRatio, Qt.FastTransformation)
+        else:
+            self.initialize_overlay('drawing')
             
     def __update_pen_tracer_overlay(self):
         """
@@ -1072,17 +1114,14 @@ class ImageAnnotator(QWidget):
             - If label slider mode is not active, uses the current label color for the tracer.
             - Otherwise, uses a black pen.
         - The tracer's size reflects the current pen width adjusted by scaling factors.
-    
+        
         This method is called whenever visual feedback about the drawing tool is needed,
         such as when the pen size or position changes.
         """
         if self.__last_pen_position is None:
             return
-        self.__pen_tracer_overlay = QPixmap(self.image.size())
-        self.__pen_tracer_overlay.fill(Qt.transparent)
-        if self.__erasing:
-            return
-        painter = QPainter(self.__pen_tracer_overlay)
+        self.initialize_overlay('pen_tracer')
+        painter = QPainter(self.pen_tracer_overlay)
         if not self.__label_slider_enabled:
             pen = QPen(self.label_colors[self.label_index_to_annotate], 1)
         else:
@@ -1093,15 +1132,21 @@ class ImageAnnotator(QWidget):
         painter.drawEllipse(self.__last_pen_position, width, width)
         painter.end()
         
+    def initialize_overlay(self, overlay_name:str):
+        if overlay_name not in {'drawing', 'annotation', 'pen_tracer'}:
+            raise ValueError("`overlay_name` should either be 'drawing' or 'annotation'")
+        attribute_name = f'_{self.__class__.__name__}__{overlay_name}_overlay'
+        self.__dict__[attribute_name] = QPixmap(self.image.size())
+        self.__dict__[attribute_name].fill(Qt.transparent)
+        
     def mouseMoveEvent(self, event):
         """
-        Handles mouse movement events when not resizing and updates the image display based on cursor position 
-        and button states.
+        Handles mouse movement events and updates the image display based on cursor position and button states.
     
         If the left mouse button is held down:
             - If erasing is enabled, it attempts to drop the smallest annotation hovered over and retraces annotations.
             - Otherwise, it draws a line based on the mouse movement.
-            - Refreshes the cursor.
+            - Combines layers and updates the image display.
             
         Additionally, updates the label displays and tracks the last position of the pen.
         
@@ -1109,23 +1154,27 @@ class ImageAnnotator(QWidget):
             event (QMouseEvent): The event object containing details about the mouse movement.
         
         Note: It is very necessary to apply this routine while the application is not resizing. Otherwise, an IndexError 
-        exception could occur due to the cursor being mapped to outside the bounds of the original image.
+        exception could later occur due to the cursor (`self.__yx_cursor_within_original_image`) being mapped to outside 
+        the bounds of the original image.
         """
-        if self.__currently_resizing:
+        if self.__resize_flag:
             return
         current_pen_position = event.pos()
         self.__update_yx_cursor_within_original_image(current_pen_position)
         if event.buttons() & Qt.LeftButton:
-            if self.__erasing:
+            self.__draw(current_pen_position, 'line')
+            if self.erasing:
                 updated = self.__drop_smallest_annotation_hovered_over()
                 if updated:
                     self.__retrace_annotations()
                     if self.__autosave:
                         self.save()
-            else:
-                self.__draw(current_pen_position, 'line')
+        else:
+            self.__update_contents_of_label_displays()
         self.last_pen_position = current_pen_position
-        self.__cursor_user_interface_update_routine()
+        self.__update_pen_tracer_overlay()
+        self.__combine_layers_and_update_image_display()
+        self.__update_positions_of_label_displays()
         
     def __update_yx_cursor_within_original_image(self, position:QPoint):
         if position is None:
@@ -1160,7 +1209,7 @@ class ImageAnnotator(QWidget):
                 updated = True
         elif event.button() == Qt.LeftButton and not self.erasing:
             yx_root = event.y(), event.x()
-            rgba_array = pixmap_to_rgba_array(self.drawing)
+            rgba_array = pixmap_to_rgba_array(self.drawing_overlay)
             rgb_array = rgba_array[:,:,:-1]
             traversed_pixels_mask = locate_all_pixels_via_floodfill(rgb_array, yx_root)
             if self.use_bounding_boxes:
@@ -1182,6 +1231,7 @@ class ImageAnnotator(QWidget):
                 self.labelled_segment_masks = np.concatenate([labelled_segment_mask[np.newaxis, ...], self.labelled_segment_masks])
             updated = True
         if updated:
+            self.drawing_overlay.fill(Qt.transparent)
             self.__annotate_user_interface_update_routine()
             if self.__autosave:
                 self.save()
