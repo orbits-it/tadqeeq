@@ -15,18 +15,23 @@ images_directory_path, annotations_directory_path = f'{root_directory_path}/imag
 
 def main():
     
-    if len(sys.argv) < 4:
+    def print_help_message():
         print("Usage: tadqeeq [--verbose|--autosave|--use_bounding_boxes]* <images_directory_path> <annotations_directory_path> <class_names_filepath>")
+        
+    if len(sys.argv) < 4:
+        print_help_message()
         sys.exit(1)
     
     images_directory_path, annotations_directory_path = sys.argv[-3:-1]
     if not os.path.isdir(images_directory_path):
         print(f'Error: The directory "{images_directory_path}" does not exist.')
+        print_help_message()
         sys.exit(2)
         
     class_names_filepath = sys.argv[-1]
     if not os.path.isfile(class_names_filepath):
         print(f'Error: The file "{class_names_filepath}" does not exist.')
+        print_help_message()
         sys.exit(3)
     
     with open(class_names_filepath) as file:
