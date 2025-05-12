@@ -742,7 +742,7 @@ class ImageAnnotator(QWidget):
         compound_layer = QPixmap(self.image)
         painter = QPainter(compound_layer)
         painter.drawPixmap(0, 0, self.drawing)
-        if hasattr(self, '_ImageAnnotator__pen_tracer_overlay'):
+        if hasattr(self, f'_{self.__class__.__name__}__pen_tracer_overlay'):
             painter.drawPixmap(0, 0, self.__pen_tracer_overlay)
         painter.end()
         self.__image_display.setPixmap(compound_layer)
