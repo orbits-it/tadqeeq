@@ -38,6 +38,7 @@ def main():
     window = ImageAnnotatorWindow(
         images_directory_path, annotations_directory_path,
         label_color_pairs=class_names,
+        void_background='--void_background' in sys.argv,
         use_bounding_boxes='--use_bounding_boxes' in sys.argv,
         autosave='--autosave' in sys.argv,
         verbose='--verbose' in sys.argv

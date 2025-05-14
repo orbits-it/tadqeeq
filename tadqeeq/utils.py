@@ -14,22 +14,22 @@ import os
 def compute_segment_areas(labelled_segment_masks):
     """
     Compute the pixel area of each individual mask in a stack of labelled segment masks.
-
+    
     This function calculates the area (in terms of pixel count) for each segment in 
     a stack of labelled segment masks, where each mask represents a segment with a 
     specific label. The mask values are assumed to be labelled with integer values, 
     and 255 is considered as background or empty pixels.
-
+    
     Args:
         labelled_segment_masks (np.ndarray): A 3D numpy array where each slice (along 
                                               the first axis) represents a binary mask 
                                               of a segment. The masks have pixel values 
                                               for the segmented regions, with 255 as background.
-
+    
     Returns:
         np.ndarray: A 1D numpy array where each element represents the area (number of 
                     pixels) of the corresponding segment in the stack of labelled segment masks.
-
+    
     Example:
         labelled_segment_masks = np.array([[[255, 0, 255], [0, 0, 255]], [[0, 0, 255], [255, 0, 0]]])
         areas = compute_segment_areas(labelled_segment_masks)
@@ -179,19 +179,19 @@ def compute_overlap_area(box_a:np.ndarray, box_b:np.ndarray):
 def mask_to_bounding_box(traversed_pixels_mask):
     """
     Convert a binary mask to a bounding box (x, y, width, height).
-
+    
     This function takes a binary mask, where traversed pixels are non-zero (usually `True` 
     or `1`), and computes the smallest axis-aligned bounding box that can contain all of 
     the non-zero pixels.
-
+    
     Args:
         traversed_pixels_mask (np.ndarray): A binary mask array where non-zero elements 
                                              represent the "traversed" or relevant pixels.
-
+    
     Returns:
         np.ndarray: An array representing the bounding box, in the format 
                     [x_minimum, y_minimum, width, height].
-
+    
     Example:
         mask = np.array([[0, 1, 0], [1, 1, 0], [0, 0, 0]])
         bounding_box = mask_to_bounding_box(mask)
@@ -204,18 +204,18 @@ def mask_to_bounding_box(traversed_pixels_mask):
 def pixmap_to_rgba_array(drawing:QPixmap):
     """
     Convert a QPixmap to an RGBA numpy array.
-
+    
     This function converts a `QPixmap` to an RGBA array. The resulting array contains the 
     RGBA values (Red, Green, Blue, Alpha) of each pixel in the image. The conversion ensures 
     that each pixel is represented by 4 channels.
-
+    
     Args:
         drawing (QPixmap): The `QPixmap` object to be converted.
-
+    
     Returns:
         np.ndarray: A numpy array of shape (height, width, 4) where each element represents 
                     an RGBA value in uint8 format.
-
+    
     Example:
         pixmap = QPixmap("image.png")
         rgba_array = pixmap_to_rgba_array(pixmap)
@@ -241,7 +241,7 @@ def locate_all_pixels_via_floodfill(rgb_array:np.ndarray, yx_root:tuple):
     (given in (y, x) coordinates) in the provided RGB image array. It identifies all neighboring 
     pixels that have the same RGB color as the starting pixel and returns a mask of the connected 
     region.
-
+    
     Args:
         rgb_array (np.ndarray): The RGB image array with shape (height, width, 3), where each 
                                  pixel contains RGB values.
@@ -252,7 +252,7 @@ def locate_all_pixels_via_floodfill(rgb_array:np.ndarray, yx_root:tuple):
         np.ndarray: A boolean mask (2D array) of the same height and width as `rgb_array`, where 
                     `True` values indicate the pixels that are connected to the starting pixel and 
                     have the same RGB color.
-
+                    
     Example:
         rgb_image = np.array([[[255, 0, 0], [255, 0, 0]], [[0, 255, 0], [255, 0, 0]]])
         mask = locate_all_pixels_via_floodfill(rgb_image, (0, 0))
@@ -275,11 +275,34 @@ def locate_all_pixels_via_floodfill(rgb_array:np.ndarray, yx_root:tuple):
     return traversed_pixels_mask
 
 def get_pixmap_compatible_image_filepaths(images_directory_path):
+    """
+    Retrieves a list of image file paths from a directory that are compatible with QPixmap.
+    
+    This method filters all files in the specified directory and returns those that:
+    - Are regular files (not directories).
+    - Have extensions supported by QPixmap (e.g., .png, .jpg, .bmp, etc.).
+    
+    The extension check is case-insensitive to ensure compatibility with uppercase/lowercase file names.
+    
+    Parameters:
+        images_directory_path (str): The path to the directory containing image files.
+    
+    Returns:
+        list of str: A list of absolute file paths to valid image files compatible with QPixmap.
+    
+    Raises:
+        FileNotFoundError: If the specified directory does not exist.
+    
+    Example:
+        images = Helper.get_pixmap_compatible_image_filepaths("/path/to/images/")
+        for image_path in images:
+            pixmap = QPixmap(image_path)
+    """
     valid_extensions = {
         '.png', '.jpg', '.jpeg', '.bmp', '.gif',
         '.ppm', '.pgm', '.pbm', '.xbm', '.xpm'
     }
     filepaths = [os.path.join(images_directory_path, filename) for filename in os.listdir(images_directory_path)]
-    check_filepath = lambda filepath: os.path.isfile(filepath) and os.path.splitext(filepath)[-1] in valid_extensions
+    check_filepath = lambda filepath: os.path.isfile(filepath) and os.path.splitext(filepath)[-1].lower() in valid_extensions
     valid_filepaths = list(filter(check_filepath, filepaths))
     return valid_filepaths

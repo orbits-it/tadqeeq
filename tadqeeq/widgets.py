@@ -14,12 +14,14 @@ from functools import reduce
 from collections.abc import Iterable
 from skimage.io import imsave
 from skimage.transform import resize
+from skimage.feature import canny
 from scipy.ndimage import binary_fill_holes
 
 from .utils import compute_segment_areas, rgba_array_to_pixmap, \
                    apply_lut_replacement, detect_overlapping_boxes_to_clean, \
                    mask_to_bounding_box, pixmap_to_rgba_array, \
-                   locate_all_pixels_via_floodfill
+                   locate_all_pixels_via_floodfill, \
+                   postprocess_overall_segment_mask_for_saving
                   
 from warnings import filterwarnings
 filterwarnings('ignore', category=UserWarning, message='.*low contrast image.*')
@@ -29,23 +31,26 @@ class ImageAnnotator(QWidget):
     """
     Interactive PyQt5 widget for image annotation using segmentation masks or bounding boxes.
 
-    Args:
-        image_path (str): Path to the input image.\n
-        annotation_path (str): Path to save/load annotations (.npy, .png, or .txt).\n
-        autosave (bool): Enable autosave after edits.\n
-        key_sequence_to_save (str): Keyboard shortcut for manual save (default Ctrl+S).\n
-        minimum_pen_width (int): Minimum width of drawing pen.\n
-        minimum_font_size (int): Minimum font size for floating labels.\n
-        hsv_offsets (tuple): HSV color starting offsets.\n
-        opacity (float): Opacity for drawn mask overlays.\n
-        label_slider_sensitivity (float): Sensitivity when scrolling between label classes.\n
-        label_color_pairs (int): Number of distinct label-color pairs (for classes).\n
-        floating_label_display_offsets (tuple): Floating label pixel offsets (x, y).\n
-        bounding_box_side_length_thresholds (tuple): Minimum and maximum box size allowed.\n
-        overlap_vs_smallest_area_threshold (float): Threshold to remove overlapping boxes (by small area).\n
-        overlap_vs_union_area_threshold (float): Threshold to remove overlapping boxes (by union area).\n
-        corner_label_attached_to_bounding_box (bool): Attach labels to bounding box corners.\n
-        verbose (bool): Enable or disable printing log messages.
+    Parameters:
+        image_path (str): Path to the input image.
+        annotation_path (str): Path to save/load annotations (.npy, .png, or .txt).
+        void_background (bool): Whether to treat background as a void region (labelled 255) or not.
+        autosave (bool): Automatically save annotations after each edit.
+        key_sequence_to_save (str): Keyboard shortcut to manually trigger saving (default: "Ctrl+S").
+        minimum_pen_width (int): Minimum width of the drawing pen.
+        minimum_font_size (int): Minimum font size for floating label displays.
+        hsv_offsets (tuple): Starting HSV offsets for label color generation.
+        opacity (float): Opacity of drawn segmentation masks.
+        label_slider_sensitivity (float): Scroll sensitivity for switching between labels.
+        label_color_pairs (int): Number of label-color pairs to support.
+        pen_width_slider_sensitivity (float): Sensitivity for adjusting pen width via scroll.
+        maximum_pen_width_multiplier (float): Maximum multiplier allowed for pen width.
+        floating_label_display_offsets (tuple): (x, y) pixel offset for floating label placement.
+        bounding_box_side_length_thresholds (tuple): Min and max allowed bounding box side lengths.
+        overlap_vs_smallest_area_threshold (float): Overlap threshold for suppressing small box collisions.
+        overlap_vs_union_area_threshold (float): Overlap threshold for suppressing boxes using union ratio.
+        corner_label_attached_to_bounding_box (bool): Whether labels appear attached to bounding box corners.
+        verbose (bool): Enables logging and debug prints if True.
     """
     
     __RESIZE_DELAY = 200
@@ -53,22 +58,23 @@ class ImageAnnotator(QWidget):
     def __init__(self, 
                  image_path, 
                  annotation_path,
+                 void_background=False,
                  autosave=True,
                  key_sequence_to_save='Ctrl+S',
-                 minimum_pen_width=5,
+                 minimum_pen_width=4,
                  minimum_font_size=16,
                  hsv_offsets=(0,255,200), 
                  opacity=0.5,
                  label_slider_sensitivity=0.30,
                  label_color_pairs=32,
                  pen_width_slider_sensitivity=0.05,
-                 maximum_pen_width_multiplier=3.0,
+                 maximum_pen_width_multiplier=4.0,
                  floating_label_display_offsets=(15,30),
                  bounding_box_side_length_thresholds=(25,2000),
                  overlap_vs_smallest_area_threshold=0.95,
                  overlap_vs_union_area_threshold=0.95,
                  corner_label_attached_to_bounding_box=True,
-                 verbose=False):
+                 verbose=True):
         
         def configure_verbosity():
             self.__verbose = verbose
@@ -114,6 +120,7 @@ class ImageAnnotator(QWidget):
             self.__label_font_size = minimum_font_size
             self.__hsv_offsets = hsv_offsets
             self.__opacity = opacity
+            self.__void_background = void_background
             
         def configure_bounding_boxes():
             self.__use_bounding_boxes = os.path.splitext(annotation_path)[-1].lower().strip() == '.txt'
@@ -154,6 +161,11 @@ class ImageAnnotator(QWidget):
         initialize_sliders()
         load_image_annotation_pair()
         enable_mouse_tracking()
+        
+    @property
+    def void_background(self):
+        """Indicates whether the background is treated as a void class, labelled 255."""
+        return self.__void_background
         
     @property
     def RESIZE_DELAY(cls):
@@ -438,10 +450,9 @@ class ImageAnnotator(QWidget):
             else:
                 self.__path_to_labelled_segment_masks = os.path.splitext(value)[0] + '.npy'
                 self.labelled_segment_masks = np.load(self.__path_to_labelled_segment_masks)
-        except Exception as error:
-            if isinstance(error, AssertionError) or isinstance(error, FileNotFoundError):
-                self.log('No annotations existing, starting afresh...')
-                self.__clear_annotations()
+        except FileNotFoundError:
+            self.log('No annotations existing, starting afresh...')
+            self.__clear_annotations()
         finally:
             self.__annotate_user_interface_update_routine()
             
@@ -548,13 +559,26 @@ class ImageAnnotator(QWidget):
         
     def save(self):
         """
-        Save current annotations to disk.
-        
-        - Bounding boxes are saved as a plain text (.txt) file.
-        - Segmentation masks are saved both as a NumPy array (.npy) and a PNG image (.png).
-        
+        Saves the current annotations to disk.
+    
+        Behavior:
+        - If using bounding boxes:
+            - Saves annotations as a plain text `.txt` file.
+            - Each line represents one bounding box, written in space-separated string format.
+        - If using segmentation masks:
+            - Saves the raw labelled segment masks as a `.npy` file.
+            - Computes the overall segment mask and applies label shifting or void boundary tracing
+              using `Helper.postprocess_overall_segment_mask_for_saving()`.
+            - Saves the final processed mask as a `.png` image.
+    
+        Notes:
+            - The save directory is automatically created if it does not exist.
+            - The postprocessing step ensures label 0 is reserved for background if `void_background` is False,
+              and boundaries around segments are properly traced as void (label 255), otherwise, both 
+              the background and segment boundaries are labelled as void.
+    
         Raises:
-            OSError: If unable to write to the save path.
+            OSError: If writing to the specified path fails due to permission or filesystem issues.
         """
         directory_path = os.path.dirname(self.annotation_path)
         os.makedirs(directory_path, exist_ok=True)
@@ -564,7 +588,8 @@ class ImageAnnotator(QWidget):
                 file.writelines(lines)
         else:
             np.save(self.__path_to_labelled_segment_masks, self.labelled_segment_masks)
-            imsave(self.annotation_path, self.overall_segment_mask)
+            overall_segment_mask_to_save = postprocess_overall_segment_mask_for_saving(self.overall_segment_mask, self.void_background)
+            imsave(self.annotation_path, overall_segment_mask_to_save)
         absolute_file_path = os.path.abspath(self.annotation_path)
         self.log(f'Annotations saved to "{absolute_file_path}"')
     
@@ -582,29 +607,33 @@ class ImageAnnotator(QWidget):
         
     def __combine_labelled_segment_masks(self):
         """
-        Combines multiple labelled segment masks into a single mask by merging them.
-        
-        The method iterates over the labelled segment masks and merges them into one mask:
-        - For each mask, the annotated portions (i.e., portions not equal to 255) are copied into the corresponding positions of the next mask.
-        - The resulting combined mask has all the annotations merged.
-        
-        If no labelled segment masks are present, the method returns a mask of the original shape, filled with the value 255 (representing no annotations).
-        
+        Merges all labelled segment masks into a single composite mask.
+    
+        Behavior:
+        - Uses a custom `merge()` function to overlay masks:
+            - For each pixel in `mask_a` that is labelled and belongs to a segment,
+              its value is copied into `mask_b` at the same location.
+            - This effectively prioritizes earlier mask data in the sequence.
+        - After merging, adds either 0 or 1 to the mask based on `not self.void_background`:
+            - If `void_background` is `False` (i.e., no void class), the merged labels are incremented by 1 and the background label (255) is overflowed to become 0.
+            - If `void_background` is `True`, the mask remains unchanged (i.e., background already marked as void - 255).
+        - Invokes `Helper.trace_bounds_around_segments()` to draw a void-labelled line (255) of width 1 pixel surrounding each annotated segment.
+        - If no masks are present, returns an empty array filled with `255 + not self.void_background`,
+          ensuring the void class (255) is either maintained or perceived as 0 appropriately.
+    
         Returns:
-            np.ndarray: A single combined mask containing all annotations, or a mask filled with 255 if no segment masks exist.
-        
-        Notes:
-            - The merged mask will have the same shape as the original segment mask array.
-            - The method uses the `reduce` function to apply the merge operation iteratively across all masks.
+            np.ndarray: A `uint8` array representing the combined segment mask.
         """
         def merge(mask_a, mask_b):
             annotated_portion_in_mask_a = mask_a != 255
             annotated_indices_in_mask_a = np.where(annotated_portion_in_mask_a)
             mask_b[annotated_indices_in_mask_a] = mask_a[annotated_indices_in_mask_a]
             return mask_b
+        
         if self.labelled_segment_masks.size:
             masks = self.labelled_segment_masks.copy()
-            return reduce(merge, masks).astype('uint8')
+            combined_masks = reduce(merge, masks).astype('uint8')
+            return combined_masks
         return np.zeros(self.__original_array_shape, 'uint8') + 255
     
     def __resize_user_interface_update_routine(self):
@@ -1235,3 +1264,41 @@ class ImageAnnotator(QWidget):
             self.__annotate_user_interface_update_routine()
             if self.__autosave:
                 self.save()
+                
+    def trace_bounds_around_segments(self):
+        """
+        Detects 1-pixel-wide boundaries around segments using Canny edge detection.
+    
+        Behavior:
+        - Applies the Canny edge detector with low and high thresholds set to 0 and 1, respectively.
+        - Operates on `self.overall_segment_mask` (a 2D `uint8` array).
+        - Identifies the boundary pixels between segmented regions.
+        - Returns the indices of the detected boundary pixels.
+    
+        Returns:
+            tuple of np.ndarray: A tuple (row_indices, col_indices) representing the coordinates
+                                 of the boundary pixels.
+        """
+        overall_mask = self.overall_segment_mask.copy()
+        bound_indices = np.where(canny(overall_mask, low_threshold=0, high_threshold=1))
+        return bound_indices
+                
+    def postprocess_overall_segment_mask_for_saving(self):
+        """
+        Prepares the overall segmentation mask for saving by applying label shifting and boundary tracing.
+        
+        Behavior:
+        - If `void_background` is False:
+            - Increments all label values by 1, turning background (255) into 0 and shifting segment labels.
+        - If `void_background` is True:
+            - Leaves label values unchanged (255 remains as void).
+        - Detects boundaries between segments and sets those boundary pixels to 255 (void label).
+        
+        Returns:
+            np.ndarray: The final segmentation mask array with boundaries marked and label values adjusted,
+                        suitable for saving as a PNG.
+        """
+        overall_segment_mask_to_save = self.overall_segment_mask + (not self.void_background)
+        bound_indices = self.trace_bounds_around_segments()
+        overall_segment_mask_to_save[bound_indices] = 255
+        return overall_segment_mask_to_save
