@@ -476,7 +476,7 @@ class ImageAnnotator(QWidget):
         Sets the labelled segment masks, sorts them by segment area, and updates the overall segment mask.
         
         This setter method:
-        - Computes the areas of each segment in the provided `value` array using the `Helper.compute_segment_areas` function.
+        - Computes the areas of each segment in the provided `value` array using the `compute_segment_areas` function.
         - Sorts the segments by their areas in ascending order.
         - Combines the sorted segment masks into a single mask.
         
@@ -567,7 +567,7 @@ class ImageAnnotator(QWidget):
         - If using segmentation masks:
             - Saves the raw labelled segment masks as a `.npy` file.
             - Computes the overall segment mask and applies label shifting or void boundary tracing
-              using `Helper.postprocess_overall_segment_mask_for_saving()`.
+              using `self.postprocess_overall_segment_mask_for_saving()`.
             - Saves the final processed mask as a `.png` image.
     
         Notes:
@@ -587,7 +587,7 @@ class ImageAnnotator(QWidget):
                 file.writelines(lines)
         else:
             np.save(self.__path_to_labelled_segment_masks, self.labelled_segment_masks)
-            overall_segment_mask_to_save = postprocess_overall_segment_mask_for_saving(self.overall_segment_mask, self.void_background)
+            overall_segment_mask_to_save = self.postprocess_overall_segment_mask_for_saving()
             imsave(self.annotation_path, overall_segment_mask_to_save)
         absolute_file_path = os.path.abspath(self.annotation_path)
         self.log(f'Annotations saved to "{absolute_file_path}"')
@@ -610,18 +610,14 @@ class ImageAnnotator(QWidget):
     
         Behavior:
         - Uses a custom `merge()` function to overlay masks:
-            - For each pixel in `mask_a` that is labelled and belongs to a segment,
-              its value is copied into `mask_b` at the same location.
-            - This effectively prioritizes earlier mask data in the sequence.
-        - After merging, adds either 0 or 1 to the mask based on `not self.void_background`:
-            - If `void_background` is `False` (i.e., no void class), the merged labels are incremented by 1 and the background label (255) is overflowed to become 0.
-            - If `void_background` is `True`, the mask remains unchanged (i.e., background already marked as void - 255).
-        - Invokes `Helper.trace_bounds_around_segments()` to draw a void-labelled line (255) of width 1 pixel surrounding each annotated segment.
-        - If no masks are present, returns an empty array filled with `255 + not self.void_background`,
-          ensuring the void class (255) is either maintained or perceived as 0 appropriately.
+            - For each pixel in `mask_a` that is labelled (i.e., not 255),
+              its value overwrites the corresponding pixel in `mask_b`.
+            - This gives priority to earlier masks in the sequence when overlapping occurs.
+        - If no labelled masks are present, returns a blank mask filled with 255 (void label).
     
         Returns:
-            np.ndarray: A `uint8` array representing the combined segment mask.
+            np.ndarray: A `uint8` array representing the merged segment mask.
+                        Annotated regions retain their original labels; unannotated regions are 255.
         """
         def merge(mask_a, mask_b):
             annotated_portion_in_mask_a = mask_a != 255
@@ -793,7 +789,7 @@ class ImageAnnotator(QWidget):
         This method checks which annotations are under the cursor and determines the smallest one based on its area:
         
         - If bounding boxes are used, the area is calculated as the product of the bounding box dimensions.
-        - If segment masks are used, the area is computed using a helper function.
+        - If segment masks are used, the area is computed using a helper function from `.utils`.
         
         The method returns a mask corresponding to the smallest hovered annotation.
         
