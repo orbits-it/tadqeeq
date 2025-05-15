@@ -1047,7 +1047,8 @@ class ImageAnnotator(QWidget):
         depending on the current mode.
         
         Behavior:
-        - If erasing and label slider mode are both active, then erasing mode is disabled.
+        - If erasing and label slider mode are both active, then label slider mode is disabled 
+        (only cursor size can be varied using the mouse wheel).
         - If label slider mode is enabled:
             - Adjusts the label index accumulator based on the wheel direction and sensitivity.
         - Otherwise:
@@ -1060,7 +1061,7 @@ class ImageAnnotator(QWidget):
             event (QWheelEvent): The wheel event triggered by user input.
         """
         if self.erasing and self.__label_slider_enabled:
-            self.__erasing = False
+                self.__label_slider_enabled = False
         delta = event.angleDelta().y()
         if self.__label_slider_enabled:
             delta = self.__label_slider_sensitivity * np.sign(delta)
@@ -1087,7 +1088,7 @@ class ImageAnnotator(QWidget):
             - In both cases, updates the combined image display.
         
         - Right Button:
-            - Toggles the erasing mode.
+            - Toggles the erasing mode and enables label slider mode.
             - Updates the pen tracer overlay and refreshes the image and the contents of label displays.
         
         - Middle Button:
@@ -1110,6 +1111,7 @@ class ImageAnnotator(QWidget):
             self.__combine_layers_and_update_image_display()
         elif event.button() == Qt.RightButton:
             self.__erasing ^= True
+            self.__label_slider_enabled = True
             self.__update_pen_tracer_overlay()
             self.__combine_layers_and_update_image_display()
             self.__update_contents_of_label_displays()
