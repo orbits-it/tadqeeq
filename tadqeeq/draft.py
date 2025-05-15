@@ -661,7 +661,7 @@ class ImageAnnotator(QWidget):
         """Update the annotation overlay and label displays after changes."""
         self.__retrace_annotations()
         self.__combine_layers_and_update_image_display()
-        self.__update_label_displays()
+        self.__update_contents_of_label_displays()
     
     def __reload_image(self):
         """Reload the original image without affecting current annotations."""
@@ -1065,12 +1065,11 @@ class ImageAnnotator(QWidget):
         - If erasing mode is active, it is disabled.
         - If label slider mode is enabled:
             - Adjusts the label index accumulator based on the wheel direction and sensitivity.
-            - Updates the label display accordingly.
         - Otherwise:
             - Adjusts the pen width accumulator based on the wheel direction and sensitivity.
         
-        After handling the wheel input, this method updates the pen tracer overlay 
-        and refreshes the image display.
+        After handling the wheel input, this method updates the pen tracer overlay, 
+        refreshes the image display, and updates the label displays accordingly..
         
         Parameters:
             event (QWheelEvent): The wheel event triggered by user input.
@@ -1081,12 +1080,12 @@ class ImageAnnotator(QWidget):
         if self.__label_slider_enabled:
             delta = self.__label_slider_sensitivity * np.sign(delta)
             self.label_index_accumulator += delta
-            self.__update_label_displays()
         else:
             delta = self.__pen_width_slider_sensitivity * np.sign(delta)
             self.pen_width_multiplier_accumulator += delta
         self.__update_pen_tracer_overlay()
         self.__combine_layers_and_update_image_display()
+        self.__update_contents_of_label_displays()
     
     def mousePressEvent(self, event):
         """
@@ -1104,7 +1103,7 @@ class ImageAnnotator(QWidget):
         
         - Right Button:
             - Toggles the erasing mode.
-            - Updates the pen tracer overlay and refreshes the image and label displays.
+            - Updates the pen tracer overlay and refreshes the image and the contents of label displays.
         
         - Middle Button:
             - Toggles the label slider mode (used for navigating label indices).
@@ -1128,7 +1127,7 @@ class ImageAnnotator(QWidget):
             self.__erasing ^= True
             self.__update_pen_tracer_overlay()
             self.__combine_layers_and_update_image_display()
-            self.__update_label_displays()
+            self.__update_contents_of_label_displays()
         elif event.button() == Qt.MiddleButton:
             self.__label_slider_enabled ^= True
             self.__update_pen_tracer_overlay()
@@ -1150,8 +1149,8 @@ class ImageAnnotator(QWidget):
         - If in erasing mode, the overlay is left blank and the method returns.
         - Otherwise, draws a circle (tracer) at the last pen position to indicate where and how large 
           the next annotation will be.
-            - If label slider mode is not active, uses the current label color for the tracer.
-            - Otherwise, uses a black pen.
+            - If either of label slider or eraser modes is active, it uses a black pen for the tracer.
+            - Otherwise, it uses the current label color.
         - The tracer's size reflects the current pen width adjusted by scaling factors.
         
         This method is called whenever visual feedback about the drawing tool is needed,
@@ -1161,10 +1160,10 @@ class ImageAnnotator(QWidget):
             return
         self.initialize_overlay('pen_tracer')
         painter = QPainter(self.pen_tracer_overlay)
-        if not self.__label_slider_enabled:
-            pen = QPen(self.label_colors[self.label_index_to_annotate], 1)
-        else:
+        if self.__label_slider_enabled or self.__erasing:
             pen = QPen(Qt.black, 1)
+        else:
+            pen = QPen(self.label_colors[self.label_index_to_annotate], 1)
         painter.setPen(pen)
         pen_width = self.__annotation_pen.widthF()
         width = pen_width - 6 * self.pen_width_multiplier * self.__scale_factor

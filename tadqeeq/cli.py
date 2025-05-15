@@ -13,7 +13,7 @@ from .implementations import ImageAnnotatorWindow
 def main():
     
     def print_help_message():
-        print("Usage: tadqeeq [--verbose|--autosave|--use_bounding_boxes]* <images_directory_path> <annotations_directory_path> <class_names_filepath>")
+        print("Usage: tadqeeq [--void_background|--verbose|--autosave|--use_bounding_boxes]* <images_directory_path> <annotations_directory_path> <class_names_filepath>")
         
     if len(sys.argv) < 4:
         print_help_message()
