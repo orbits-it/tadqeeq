@@ -81,7 +81,7 @@ tadqeeq [--void_background|--verbose|--autosave|--use_bounding_boxes]* <images_d
 | Erase (one object)      | Right-click + Left-click |
 | Toggle erase mode       | Right-click |
 | Clear all               | Double right-click |
-| Scroll through labels / Adjust pen size   | Mouse wheel |
+| Scroll through labels / Adjust cursor size   | Mouse wheel |
 | Save annotations        | Ctrl+S |
 | Show label on hover     | Hover cursor |
 | Navigate through images (CLI only) | A / D |

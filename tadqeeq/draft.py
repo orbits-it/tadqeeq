@@ -1062,7 +1062,7 @@ class ImageAnnotator(QWidget):
         depending on the current mode.
         
         Behavior:
-        - If erasing mode is active, it is disabled.
+        - If erasing and label slider mode are both active, then erasing mode is disabled.
         - If label slider mode is enabled:
             - Adjusts the label index accumulator based on the wheel direction and sensitivity.
         - Otherwise:
@@ -1074,7 +1074,7 @@ class ImageAnnotator(QWidget):
         Parameters:
             event (QWheelEvent): The wheel event triggered by user input.
         """
-        if self.erasing:
+        if self.erasing and self.__label_slider_enabled:
             self.__erasing = False
         delta = event.angleDelta().y()
         if self.__label_slider_enabled:
