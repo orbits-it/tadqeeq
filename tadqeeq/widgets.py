@@ -229,6 +229,7 @@ class ImageAnnotator(QWidget):
         """Sets a new QPixmap image and rescale."""
         self.__image_path = value
         self.image = QPixmap(value)
+        self.initialize_overlay('drawing')
         
     @property
     def label_index_to_annotate(self):
