@@ -58,16 +58,17 @@ from tadqeeq import ImageAnnotatorWindow
 ### Run CLI tool from command line (if installed via pip):
 
 ```bash
-tadqeeq (--void_background)? (--verbose)? (--autosave)? (--use_bounding_boxes)? --images <images_directory_path> --classes <class_names_filepath> (--bounding-boxes <bounding_boxes_directory_path>)? (--semantic-segments <semantic_segments_directory_path>)?
+tadqeeq [--void_background] [--verbose] [--autosave] [--use_bounding_boxes] --images <images_directory_path> --classes <class_names_filepath> [--bounding-boxes <bounding_boxes_directory_path>] [--semantic-segments <semantic_segments_directory_path>]
 ```
 
 **Notes:**
 >1. Use A and D to navigate through images.</br>
->2. The annotation files could either be:</br>
+>2. At least one of --bounding-boxes or --semantic-segments must be provided.
+>3. The annotation files could either be:</br>
 >>a) PNG for **semantic segmentation masks** with class-labeled pixels on a white background.</br>
 >>b) txt for **YOLO-style bounding boxes** formatted as: `label_index x_offset y_offset width height`.</br>
->3. <class_names_filepath> is a txt file containing a list of a class names used in annotating.</br>
->4. Tool Behavior in Segmentation:</br>
+>4. <class_names_filepath> is a txt file containing a list of a class names used in annotating.</br>
+>5. Tool Behavior in Segmentation:</br>
 >>- If `void_background` is False:</br>
 >>>- Increments all label values by 1, turning background (255) into 0 and shifting segment labels to start from 1.</br>
 >>- If `void_background` is True:</br>
