@@ -14,65 +14,34 @@ from .utils import get_pixmap_compatible_image_filepaths
 
 class ImageAnnotatorWindow(QMainWindow):
     """
-    Main application window for the Tadqeeq image annotation tool.
+    A main application window for navigating and annotating a sequence of images using the ImageAnnotator widget.
     
-    This window embeds an ImageAnnotator widget and provides navigation, resizing, 
-    and directory management functionality for image annotation tasks.
+    This window supports:
+    - Image navigation via key bindings.
+    - Automatic loading of bounding boxes and semantic segments (if paths are provided).
+    - Autosizing to match the size of the annotator widget.
+    - Managed overlay updates and autosave support.
     
     Args:
-        images_directory_path (str): Directory containing images to annotate.
-        annotations_directory_path (str): Directory to read/write annotations.
-        use_bounding_boxes (bool): If True, uses bounding boxes (.txt files). If False, uses segmentation masks (.png/.npy).
-        image_navigation_keys (Iterable): Iterable of two Qt.Key values used for navigating between images (e.g., [Qt.Key_A, Qt.Key_D]).
-        **image_annotator_kwargs: Additional keyword arguments passed directly to the ImageAnnotator.
-    
-    Features:
-        - Automatically detects compatible images in the specified directory.
-        - Maintains synchronized navigation and annotation file lists.
-        - Supports switching between bounding box and segmentation modes.
-        - Handles delayed UI resizing for smoother layout adjustments.
-        - Embeds the ImageAnnotator as the central widget and updates it when navigating between files.
-        - Prevents window maximization for consistent sizing behavior.
-    
-    Example:
-        app = QApplication([])
-        window = MainWindow("images/", "annotations/", use_bounding_boxes=False)
-        window.show()
-        app.exec_()
+        images_directory_path (str): Directory containing image files to annotate.
+        bounding_boxes_directory_path (str): Directory containing bounding box annotations (optional).
+        semantic_segments_directory_path (str): Directory containing semantic segmentation masks (optional).
+        image_navigation_keys (list): List of two Qt key codes to navigate images (default: [Qt.Key_A, Qt.Key_D]).
+        **image_annotator_kwargs: Additional keyword arguments passed to the ImageAnnotator.
     """
     def __init__(self,
                  images_directory_path,
-                 annotations_directory_path,
-                 use_bounding_boxes=False,
-                 image_navigation_keys=(Qt.Key_A, Qt.Key_D),
+                 bounding_boxes_directory_path,
+                 semantic_segments_directory_path,
+                 image_navigation_keys=[Qt.Key_A, Qt.Key_D],
                  **image_annotator_kwargs):
-        """
-        Initializes the main window of the Tadqeeq image annotation tool.
         
-        This constructor sets up the image annotation environment, including:
-        - Loading image and annotation file paths.
-        - Embedding the `ImageAnnotator` widget for interactive labeling.
-        - Setting up navigation, window behavior, and UI resizing.
-        
-        Args:
-            images_directory_path (str): Path to the directory containing images to be annotated.
-            annotations_directory_path (str): Path to the directory for saving/loading annotation files.
-            use_bounding_boxes (bool, optional): Whether to use bounding box annotations (.txt files). 
-                                                 If False, uses segmentation masks (.png/.npy). Default is False.
-            image_navigation_keys (list of Qt.Key, optional): Two keys used to navigate between images 
-                                                              (e.g., [Qt.Key_A, Qt.Key_D]). Default is A and D.
-            **image_annotator_kwargs: Additional keyword arguments passed to the `ImageAnnotator` widget.
-        
-        Raises:
-            ValueError: If `images_directory_path` is not a valid directory, or if 
-                        `image_navigation_keys` does not contain exactly two elements.
-        """
         def initialize_image_filepaths():
             self.images_directory_path = images_directory_path
             
         def initialize_annotation_filepaths():
-            self.__annotations_directory_path = annotations_directory_path
-            self.use_bounding_boxes = use_bounding_boxes
+            self.bounding_boxes_directory_path = bounding_boxes_directory_path
+            self.semantic_segments_directory_path = semantic_segments_directory_path
             
         def initialize_image_annotator_widget():
             self.__image_annotator_kwargs = image_annotator_kwargs
@@ -86,11 +55,6 @@ class ImageAnnotatorWindow(QMainWindow):
             self.__resize_scheduler = QTimer(self)
             self.__resize_scheduler.setSingleShot(True)
             self.__resize_scheduler.timeout.connect(self.__resize_user_interface_update_routine)
-            
-        def configure_image_navigation_keys():
-            if len(image_navigation_keys) != 2:
-                raise ValueError('`image_navigation_keys` must exactly be two keys.')
-            self.__image_navigation_keys = image_navigation_keys
         
         super().__init__()
         
@@ -100,54 +64,34 @@ class ImageAnnotatorWindow(QMainWindow):
         
         disable_maximize_button()
         configure_resize_scheduler()
-        configure_image_navigation_keys()
+        
+        self.image_navigation_keys = image_navigation_keys
         
         self.setWindowFlag(Qt.WindowMaximizeButtonHint, False)
         self.setWindowTitle('Tadqeeq - a Minimalist Image Annotator')
         self.setCentralWidget(self.__image_annotator)
-    
-    def keyPressEvent(self, event):
-        """
-        Handles keyboard input for image navigation.
-    
-        Navigates backward or forward in the image list based on the keys set 
-        in `image_navigation_keys`.
-    
-        Args:
-            event (QKeyEvent): The key press event.
-    
-        Behavior:
-            - If the first key is pressed and not at the first image, decrements the image index.
-            - If the second key is pressed and not at the last image, increments the image index.
-        """
-        if event.key() == self.image_navigation_keys[0] and self.image_index > 0:
-            self.image_index -= 1
-        elif event.key() == self.image_navigation_keys[1] and self.image_index < len(self.image_filepaths) - 1:
-            self.image_index += 1
         
     @property
     def images_directory_path(self):
         """
-        str: The path to the directory containing input images.
-
-        This property returns the current directory path used to load images
-        for annotation.
+        Get the directory path where the images are stored.
+        
+        Returns:
+            str: Absolute path to the directory containing input images.
         """
         return self.__images_directory_path
     
     @images_directory_path.setter
     def images_directory_path(self, value:str):
         """
-        Sets the directory path containing images and updates the image file list.
-    
-        This setter:
+        Set the directory path where the images are stored.
+        
         - Validates that the provided path is a directory.
-        - Stores the path internally.
-        - Populates the list of compatible image files using `Helper.get_pixmap_compatible_image_filepaths`.
-    
+        - Updates the list of image filepaths using Helper utility.
+        
         Args:
-            value (str): A path to a directory containing image files.
-    
+            value (str): New directory path to be set.
+        
         Raises:
             ValueError: If the provided path is not a valid directory.
         """
@@ -157,186 +101,245 @@ class ImageAnnotatorWindow(QMainWindow):
         self.__image_filepaths = get_pixmap_compatible_image_filepaths(value)
         
     @property
-    def annotations_directory_path(self):
+    def bounding_boxes_directory_path(self):
         """
-        str: The path to the directory where annotation files are stored.
-    
-        This is a read-only property that returns the path configured for saving or loading 
-        annotation files (either as .txt for bounding boxes or .png/.npy for masks).
-        """
-        return self.__annotations_directory_path
-    
-    @property
-    def use_bounding_boxes(self):
-        """
-        bool: Whether the annotation format is bounding boxes.
-
-        If True, annotation files are expected to be in `.txt` format, containing bounding box data.
-        If False, annotation files are assumed to be `.png` images (e.g., segmentation masks).
-        """
-        return self.__use_bounding_boxes
-    
-    @use_bounding_boxes.setter
-    def use_bounding_boxes(self, value:bool):
-        """
-        Sets the annotation mode and updates annotation file paths accordingly.
-        
-        Args:
-            value (bool): True to use bounding box annotations (`.txt`), 
-                          False to use segmentation masks (`.png`).
-        
-        Side Effects:
-            - Updates the list of annotation file paths using the selected file extension.
-        """
-        self.__use_bounding_boxes = value
-        self.__annotation_filepaths = list(map(self.image_filepath_to_annotation_filepath, self.image_filepaths))
-    
-    def image_filepath_to_annotation_filepath(self, image_filepath):
-        """
-        Generates the corresponding annotation file path for a given image file.
-        
-        Depending on the `use_bounding_boxes` setting, this will generate:
-        - a `.txt` filename (for bounding boxes), or
-        - a `.png` filename (for masks).
-        
-        Args:
-            image_filepath (str): The full path to the image file.
+        Get the directory path where bounding box annotation files are stored.
         
         Returns:
-            str: The full path to the corresponding annotation file.
+            str: Path to the bounding boxes directory.
         """
+        return self.__bounding_boxes_directory_path
+    
+    @bounding_boxes_directory_path.setter
+    def bounding_boxes_directory_path(self, value:str):
+        """
+        Set the directory path for bounding box annotation files and compute filepaths
+        corresponding to each image in the dataset.
+        
+        Args:
+            value (str): Path to the directory containing bounding box `.txt` files.
+        """
+        self.__bounding_boxes_directory_path = value
+        if value:
+            self.__bounding_boxes_filepaths = list(
+                map(lambda x: self.__image_filepath_to_annotation_filepath(x, value, '.txt'), self.image_filepaths)
+            )
+            
+    @property
+    def semantic_segments_directory_path(self):
+        """
+        Get the directory path where semantic segmentation mask files are stored.
+        
+        Returns:
+            str: The path to the semantic segments directory.
+        """
+        return self.__semantic_segments_directory_path
+    
+    @semantic_segments_directory_path.setter
+    def semantic_segments_directory_path(self, value:str):
+        """
+        Set the directory path where semantic segmentation mask files are stored,
+        and generate corresponding file paths for each image.
+        
+        Args:
+            value (str): The path to the semantic segments directory.
+        """
+        self.__semantic_segments_directory_path = value
+        if value:
+            self.__semantic_segments_filepaths = list(
+                map(lambda x: self.__image_filepath_to_annotation_filepath(x, value, '.png'), self.image_filepaths)
+            )
+    
+    @staticmethod
+    def __image_filepath_to_annotation_filepath(image_filepath, annotations_directory_path, annotation_file_extension):
+        """
+        Convert an image filepath to its corresponding annotation filepath.
+        
+        Supports generating paths for both bounding box (.txt) and semantic segment (.png) annotations.
+        
+        Args:
+            image_filepath (str): The original image filepath.
+            annotations_directory_path (str): The directory where annotations are stored.
+            annotation_file_extension (str): The annotation file extension (either '.txt' or '.png').
+        
+        Returns:
+            str: The corresponding annotation filepath.
+        
+        Raises:
+            ValueError: If the extension is not '.txt' or '.png'.
+        """
+        if annotation_file_extension not in {'.txt', '.png'}:
+            raise ValueError("`annotation_file_extension` parameter can only be either '.txt' or '.png'")
         filename = os.path.basename(image_filepath)
-        file_extension = '.txt' if self.use_bounding_boxes else '.png'
-        annotation_filename = os.path.splitext(filename)[0] + file_extension
-        annotation_filepath = os.path.join(self.annotations_directory_path, annotation_filename)
+        annotation_filename = os.path.splitext(filename)[0] + annotation_file_extension
+        annotation_filepath = os.path.join(annotations_directory_path, annotation_filename)
         return annotation_filepath
     
     @property
     def image_filepaths(self):
         """
-        List of str objects: Absolute paths to all valid image files in the image directory.
+        Get the list of filepaths for the images being annotated.
         
-        This list is populated when `images_directory_path` is set and includes only files 
-        with extensions compatible with QPixmap (e.g., .png, .jpg, .bmp, etc.).
+        Returns:
+            list(str): List of full filepaths to image files.
         """
         return self.__image_filepaths
     
     @property
-    def annotation_filepaths(self):
+    def semantic_segments_filepaths(self):
         """
-        List of str objects: Absolute paths to the corresponding annotation files for each image.
+        Get the list of filepaths for semantic segmentation mask files.
+    
+        Returns:
+            list(str): List of full filepaths to semantic segment mask files.
+        """
+        return self.__semantic_segments_filepaths
+    
+    @property
+    def bounding_boxes_filepaths(self):
+        """
+        Get the list of filepaths for the bounding box annotation files.
         
-        This list is automatically updated based on the current `image_filepaths` and the 
-        annotation format selected by `use_bounding_boxes`.
+        Returns:
+            list(str): List of full filepaths to bounding box annotation files.
         """
-        return self.__annotation_filepaths
+        return self.__bounding_boxes_filepaths
     
     @property
     def image_navigation_keys(self):
         """
-        List of QKey objects: Keyboard keys used to navigate between images.
+        Get the list of keys used for navigating between images.
         
-        By default, this is set to [Qt.Key_A, Qt.Key_D], which maps to left and right navigation.
+        Returns:
+            list: A list of 2 keys (e.g., Qt key constants) that control image navigation.
         """
         return self.__image_navigation_keys
     
     @image_navigation_keys.setter
     def image_navigation_keys(self, value:Iterable):
         """
-        Sets the keys used to navigate through the image filepath list.
-    
+        Set the keys used for navigating between images.
+        
         Args:
-            value (Iterable): An iterable containing exactly two `Qt.Key` values 
-                              for backward and forward navigation, respectively.
-    
+            value (Iterable): An iterable containing exactly two items representing navigation keys.
+        
         Raises:
-            ValueError: If `value` does not contain exactly two items.
+            ValueError: If the iterable does not contain exactly two items.
         """
         if len(value) != 2:
             raise ValueError('`image_navigation_keys` should be an `Iterable` of two items.')
         self.__image_navigation_keys = list(value)
     
+    def keyPressEvent(self, event):
+        """
+        Handle key press events to navigate between images.
+        
+        - Pressing the first navigation key moves to the previous image if not at the first.
+        - Pressing the second navigation key moves to the next image if not at the last.
+        
+        Args:
+            event (QKeyEvent): The key press event triggered by user input.
+        """
+        if event.key() == self.image_navigation_keys[0] and self.image_index > 0:
+            self.image_index -= 1
+        elif event.key() == self.image_navigation_keys[1] and self.image_index < len(self.image_filepaths) - 1:
+            self.image_index += 1
+    
     @property
     def image_index(self):
         """
-        int: The index of the currently selected image in the list of filepaths.
+        Get the current index of the image being displayed.
         
-        Changing this index will also update the `current_image_filepath`, 
-        `current_annotation_filepath`, and refresh the embedded `ImageAnnotator`.
+        Returns:
+            int: The current image index.
         """
         return self.__image_index
     
     @image_index.setter
     def image_index(self, value:int):
         """
-        Sets the current image index and updates relevant filepaths and annotator state.
-    
+        Set the current image index and update associated filepaths and annotator.
+        
         Args:
-            value (int): Index of the image to load.
-    
+            value (int): The new image index to set.
+        
         Side Effects:
-            - Updates current image and annotation file paths.
-            - Triggers update of the image annotator widget.
+            - Updates the current image filepath based on the new index.
+            - Updates the current bounding boxes and semantic segments filepaths if they exist.
+            - Calls the internal method to update the image annotator accordingly.
         """
         self.__image_index = value
         self.__current_image_filepath = self.image_filepaths[value]
-        self.__current_annotation_filepath = self.annotation_filepaths[value]
+        if hasattr(self, f'_{self.__class__.__name__}__bounding_boxes_filepaths'):
+            self.__current_bounding_boxes_filepath = self.bounding_boxes_filepaths[value]
+        if hasattr(self, f'_{self.__class__.__name__}__semantic_segments_filepaths'):
+            self.__current_semantic_segments_filepath = self.semantic_segments_filepaths[value]
         self.__update_image_annotator()
-            
+    
     def __update_image_annotator(self):
         """
-        Updates the internal `ImageAnnotator` widget with the current image and annotation paths.
+        Update or initialize the internal ImageAnnotator instance with current filepaths.
         
-        If the annotator widget has already been created, it updates its properties in-place.
-        Otherwise, it creates a new instance of the annotator with the appropriate paths and arguments.
+        - If the ImageAnnotator instance already exists, update its filepaths.
+        - Otherwise, create a new ImageAnnotator with the current image, bounding boxes, and semantic segments filepaths.
         """
         if hasattr(self, f'_{self.__class__.__name__}__image_annotator'):
-            self.__image_annotator.image_path = self.current_image_filepath
-            self.__image_annotator.annotation_path = self.current_annotation_filepath
+            self.__image_annotator.image_filepath = self.current_image_filepath
+            self.__image_annotator.bounding_boxes_filepath = self.current_bounding_boxes_filepath
+            self.__image_annotator.semantic_segments_filepath = self.current_semantic_segments_filepath
         else:
             self.__image_annotator = ImageAnnotator(
                 self.current_image_filepath, 
-                self.current_annotation_filepath, 
+                self.current_bounding_boxes_filepath,
+                self.current_semantic_segments_filepath, 
                 **self.__image_annotator_kwargs
             )
     
     @property
     def current_image_filepath(self):
         """
-        str: The full path to the currently selected image file.
+        Get the current image filepath being annotated.
+        
+        Returns:
+            str: Filepath of the current image.
         """
         return self.__current_image_filepath
     
     @property
-    def current_annotation_filepath(self):
+    def current_bounding_boxes_filepath(self):
         """
-        str: The full path to the annotation file corresponding to the current image.
+        Get the current bounding boxes annotation filepath.
+        
+        Returns:
+            str: Filepath of the current bounding boxes annotation.
         """
-        return self.__current_annotation_filepath
+        return self.__current_bounding_boxes_filepath
+    
+    @property
+    def current_semantic_segments_filepath(self):
+        """
+        Get the current semantic segments annotation filepath.
+        
+        Returns:
+            str: Filepath of the current semantic segments annotation.
+        """
+        return self.__current_semantic_segments_filepath
     
     def resizeEvent(self, event):
         """
-        Handles window resize events by scheduling a delayed UI update.
-        
-        This ensures that the interface adjusts itself smoothly after the resize, 
-        rather than responding to every intermediate size change.
+        Handle the widget resize event by starting the resize scheduler
+        with a delay defined in the image annotator.
         
         Args:
-            event (QResizeEvent): The resize event object.
+            event (QResizeEvent): The resize event.
         """
         self.__resize_scheduler.start(
             self.__image_annotator.RESIZE_DELAY
         )
-        event.accept()
         
     def __resize_user_interface_update_routine(self):
         """
-        Resizes the main window to match the size of the `ImageAnnotator` widget.
-        
-        This is triggered after a delay to avoid performance issues during continuous resizing.
+        Resize the user interface widget to match the size of the image annotator widget.
         """
         self.resize(self.__image_annotator.size())
-    
-    
-    
-    
+            

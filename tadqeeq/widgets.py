@@ -28,35 +28,41 @@ filterwarnings('ignore', category=UserWarning, message='.*low contrast image.*')
 class ImageAnnotator(QWidget):
     
     """
-    Interactive PyQt5 widget for image annotation using segmentation masks or bounding boxes.
+    Interactive PyQt5 widget for image annotation using bounding boxes and segmentation masks.
+
+    This tool supports real-time annotation, erasing, label switching, and autosave features. It can load both
+    bounding boxes (from `.txt`) and semantic segmentation masks (from `.npy`) and allows switching between them.
+    Users can draw with varying pen sizes, adjust transparency, and display floating label overlays.
 
     Parameters:
-        image_path (str): Path to the input image.
-        annotation_path (str): Path to save/load annotations (.npy, .png, or .txt).
-        void_background (bool): Whether to treat background as a void region (labelled 255) or not.
-        autosave (bool): Automatically save annotations after each edit.
-        key_sequence_to_save (str): Keyboard shortcut to manually trigger saving (default: "Ctrl+S").
-        minimum_pen_width (int): Minimum width of the drawing pen.
-        minimum_font_size (int): Minimum font size for floating label displays.
-        hsv_offsets (tuple): Starting HSV offsets for label color generation.
-        opacity (float): Opacity of drawn segmentation masks.
-        label_slider_sensitivity (float): Scroll sensitivity for switching between labels.
-        label_color_pairs (int): Number of label-color pairs to support.
-        pen_width_slider_sensitivity (float): Sensitivity for adjusting pen width via scroll.
-        maximum_pen_width_multiplier (float): Maximum multiplier allowed for pen width.
-        floating_label_display_offsets (tuple): (x, y) pixel offset for floating label placement.
-        bounding_box_side_length_thresholds (tuple): Min and max allowed bounding box side lengths.
-        overlap_vs_smallest_area_threshold (float): Overlap threshold for suppressing small box collisions.
-        overlap_vs_union_area_threshold (float): Overlap threshold for suppressing boxes using union ratio.
-        corner_label_attached_to_bounding_box (bool): Whether labels appear attached to bounding box corners.
-        verbose (bool): Enables logging and debug prints if True.
+        image_filepath (str): Path to the input image file.
+        bounding_boxes_filepath (str): Path to the file for loading/saving bounding box annotations.
+        semantic_segments_filepath (str): Path to the file for loading/saving semantic segment masks.
+        void_background (bool): Whether to treat background as a void region (labelled 255) or a regular label.
+        autosave (bool): If True, saves annotations automatically after each edit.
+        key_sequence_to_save (str): Keyboard shortcut to trigger manual save (default is "Ctrl+S").
+        minimum_pen_width (int): Minimum width of the drawing pen in pixels.
+        minimum_font_size (int): Minimum font size used in floating label displays.
+        hsv_offsets (tuple): HSV color offsets (H, S, V) for generating distinct label colors.
+        opacity (float): Opacity (0–1) for overlaying segmentation masks.
+        label_slider_sensitivity (float): Sensitivity factor for scrolling through label indices.
+        label_color_pairs (int): Number of label-color pairs to generate or expect.
+        pen_width_slider_sensitivity (float): Sensitivity of scrolling input for changing pen width.
+        maximum_pen_width_multiplier (float): Maximum multiplier for pen width scaling.
+        floating_label_display_offsets (tuple): Offset (x, y) for floating label position relative to cursor.
+        bounding_box_side_length_thresholds (tuple): Min and max allowable side lengths for bounding boxes.
+        overlap_vs_smallest_area_threshold (float): Overlap ratio (vs smallest area) above which a box is suppressed.
+        overlap_vs_union_area_threshold (float): Overlap ratio (vs union area) above which a box is suppressed.
+        corner_label_attached_to_bounding_box (bool): Whether to attach label text to bounding box corners.
+        verbose (bool): If True, enables verbose logging output for debugging and interaction feedback.
     """
     
     __RESIZE_DELAY = 200
     
     def __init__(self, 
-                 image_path, 
-                 annotation_path,
+                 image_filepath, 
+                 bounding_boxes_filepath,
+                 semantic_segments_filepath,
                  void_background=False,
                  autosave=True,
                  key_sequence_to_save='Ctrl+S',
@@ -122,7 +128,6 @@ class ImageAnnotator(QWidget):
             self.__void_background = void_background
             
         def configure_bounding_boxes():
-            self.__use_bounding_boxes = os.path.splitext(annotation_path)[-1].lower().strip() == '.txt'
             self.__bounding_box_side_length_thresholds = bounding_box_side_length_thresholds
             self.__overlap_vs_smallest_area_threshold = overlap_vs_smallest_area_threshold
             self.__overlap_vs_union_area_threshold = overlap_vs_union_area_threshold
@@ -138,15 +143,18 @@ class ImageAnnotator(QWidget):
             self.label_index_accumulator = 0.0
         
         def load_image_annotation_pair():
-            self.image_path = image_path
-            self.annotation_path = annotation_path
+            if not(bool(semantic_segments_filepath) or bool(bounding_boxes_filepath)):
+                raise ValueError('At least one annotation filepath is to be provided, either `semantic_segments_filepath` or `bounding_boxes_filepath`, or both.')
+            self.image_filepath = image_filepath
+            self.bounding_boxes_filepath = bounding_boxes_filepath
+            self.semantic_segments_filepath = semantic_segments_filepath
             
         def enable_mouse_tracking():
             self.setMouseTracking(True)
             self.__image_display.setMouseTracking(True)
             self.__label_to_annotate_display.setMouseTracking(True)
             self.__label_annotated_display.setMouseTracking(True)
-
+            
         super().__init__()
         
         configure_verbosity()
@@ -160,92 +168,246 @@ class ImageAnnotator(QWidget):
         initialize_sliders()
         load_image_annotation_pair()
         enable_mouse_tracking()
+    
+    @property
+    def use_bounding_boxes(self):
+        """
+        Check if bounding box annotations are currently enabled.
+        
+        Returns:
+            bool: True if bounding boxes are in use, False otherwise.
+        
+        Note: 
+            `hasattr` is used to make sure no NameError occurs when checking this condition before the variable exists
+        """
+        return hasattr(self, f'_{self.__class__.__name__}__use_bounding_boxes') and self.__use_bounding_boxes
+    
+    @property
+    def use_semantic_segments(self):
+        """
+        Check if semantic segmentation annotations are currently enabled.
+        
+        Returns:
+            bool: True if semantic segments are in use, False otherwise.
+            
+        Note: 
+            `hasattr` is used to make sure no NameError occurs when checking this condition before the variable exists
+        """
+        return hasattr(self, f'_{self.__class__.__name__}__use_semantic_segments') and self.__use_semantic_segments
+    
+    @property
+    def bounding_boxes_filepath(self):
+        """
+        Get the file path used for bounding box annotations.
+        
+        Returns:
+            str: Path to the bounding box annotation file.
+        """
+        return self.__bounding_boxes_filepath
+    
+    @bounding_boxes_filepath.setter
+    def bounding_boxes_filepath(self, value:str):
+        """
+        Set the file path for bounding box annotations and load data from it.
+        
+        If the file is missing or empty, a fresh annotation state is initialized.
+        
+        Args:
+            value (str): Path to the bounding box annotation file (TXT format assumed).
+        """
+        self.__bounding_boxes_filepath = value
+        self.__use_bounding_boxes = bool(value)
+        try:
+            with open(value) as file:
+                lines = file.readlines()
+            table = [line.strip().split() for line in lines if line.strip()]
+            assert len(table) > 0, 'Empty annotations file...'
+            self.__bounding_boxes = np.int32(table)
+        except (FileNotFoundError, AssertionError):
+            self.log('No annotations existing, starting afresh...')
+            self.__clear_annotations()
+        finally:
+            self.__annotate_user_interface_update_routine()
+    
+    @property
+    def semantic_segments_filepath(self):
+        """
+        Get the file path used for semantic segmentation annotations.
+        
+        Returns:
+            str: Path to the segmentation mask image file.
+        """
+        return self.__semantic_segments_filepath
+    
+    @semantic_segments_filepath.setter
+    def semantic_segments_filepath(self, value:str):
+        """
+        Set the file path for semantic segmentation annotations and load the segment masks.
+        
+        If the corresponding .npy file is missing or empty, a fresh annotation state is initialized.
+        
+        Args:
+            value (str): Path to the segmentation mask image file (PNG format assumed).
+        """
+        self.__semantic_segments_filepath = value
+        self.__use_semantic_segments = bool(value)
+        try:
+            self.__path_to_labelled_segment_masks = os.path.splitext(value)[0] + '.npy'
+            self.labelled_segment_masks = np.load(self.__path_to_labelled_segment_masks)
+            assert self.labelled_segment_masks.size > 0, 'Empty annotations file...'
+        except (FileNotFoundError, AssertionError):
+            self.log('No annotations existing, starting afresh...')
+            self.__clear_annotations()
+        finally:
+            self.__annotate_user_interface_update_routine()
         
     @property
     def void_background(self):
-        """Indicates whether the background is treated as a void class, labelled 255."""
+        """
+        Indicates whether the background is treated as a void class (labelled 255) or as a regular one (labelled 0).
+        
+        Returns:
+            bool: True if background is considered void (label 255), otherwise False.
+        """
         return self.__void_background
         
     @property
     def RESIZE_DELAY(cls):
+        """
+        Delay (in milliseconds) before triggering a resize update routine.
+        
+        Returns:
+            int: Time delay used to debounce resize events.
+        """
         return cls.__RESIZE_DELAY
         
     @property
     def last_pen_position(self):
+        """
+        Get the most recent pen position used for drawing.
+        
+        Returns:
+            QPoint: The last recorded pen position.
+        """
         return self.__last_pen_position
     
     @last_pen_position.setter
     def last_pen_position(self, value:QPoint):
+        """
+        Set the last pen position and update the corresponding cursor position 
+        in original image coordinates.
+        
+        Args:
+            value (QPoint): Latest cursor position in the widget's coordinate space.
+        """
         self.__last_pen_position = value
         self.__update_yx_cursor_within_original_image(value)
         
     @property
     def maximum_pen_width_multiplier(self):
+        """
+        Get the maximum allowed multiplier for pen width scaling.
+        
+        Returns:
+            float: Maximum multiplier used to scale pen width.
+        """
         return self.__maximum_pen_width_multiplier
     
     @maximum_pen_width_multiplier.setter
     def maximum_pen_width_multiplier(self, value):
+        """
+        Set the maximum allowed multiplier for pen width scaling.
+        
+        Args:
+            value (float): The maximum scaling factor for pen width.
+        """
         self.__maximum_pen_width_multiplier = value
     
     @property
     def verbose(self):
-        """Returns the current verbosity setting."""
+        """
+        Get the current verbosity setting.
+        
+        Returns:
+            bool: True if verbose logging is enabled, False otherwise.
+        """
         return self.__verbose
         
     @property
     def erasing(self):
-        """Returns whether erasing mode is currently active."""
+        """
+        Check whether the erasing mode is currently active.
+        
+        Returns:
+            bool: True if erasing is enabled, False otherwise.
+        """
         return self.__erasing
     
     @property
     def floating_label_display_offsets(self):
-        """Returns floating label display pixel offsets."""
+        """
+        Get the current (x, y) pixel offsets for floating label display.
+        
+        Returns:
+            tuple: Offset values used to position floating labels relative to the cursor.
+        """
         return self.__floating_label_display_offsets
     
     @floating_label_display_offsets.setter
     def floating_label_display_offsets(self, value):
         """
-        Sets the floating label display pixel offsets.
-
-        This setter method updates the pixel offsets for displaying floating 
-        labels on the image. The provided value sets the position of the floating 
-        labels. If the value is non-empty or non-zero, it enables floating label 
-        display. Otherwise, it disables the floating label feature.
+        Set the (x, y) pixel offsets for floating label placement.
+        
+        Enables or disables floating labels based on whether the given value is truthy or falsey.
+        
         Args:
-            value: The pixel offsets (e.g., a tuple or array) for positioning 
-                   floating labels on the image. If the value is empty or zero, 
-                   floating labels will be disabled.
+            value (tuple|NoneType): Pixel offset used to position floating labels relative to the cursor.
         """
         self.__floating_label_display_offsets = value
         self.__is_floating_label = bool(self.__floating_label_display_offsets)
     
     @property
-    def image_path(self):
-        """Returns the currently loaded image as QPixmap."""
-        return self.__image_path
+    def image_filepath(self):
+        """
+        Get the path to the currently loaded image.
+        
+        Returns:
+            str: Filepath of the image being annotated.
+        """
+        return self.__image_filepath
     
-    @image_path.setter
-    def image_path(self, value:str):
-        """Sets a new QPixmap image and rescale."""
-        self.__image_path = value
+    @image_filepath.setter
+    def image_filepath(self, value:str):
+        """
+        Set the path to the image and initialize the image display and drawing overlay.
+        
+        Args:
+            value (str): Path to the image file.
+        """
+        self.__image_filepath = value
         self.image = QPixmap(value)
         self.initialize_overlay('drawing')
         
     @property
     def label_index_to_annotate(self):
-        """Returns the index of the label currently selected for annotation."""
+        """
+        Get the index of the currently selected label for annotation.
+    
+        Returns:
+            int: Index of the active label used for drawing.
+        """
         return self.__label_index_to_annotate
     
     @label_index_to_annotate.setter
     def label_index_to_annotate(self, value:int):
         """
-        Sets the label index for annotation.
+        Set the index of the label to be used for annotation.
         
-        This setter method updates the label that is currently selected for 
-        annotating objects in the image. The provided index is used to select 
-        the appropriate label from the internal list of labels. Additionally, 
-        the annotation pen color is updated to match the color associated with 
-        the selected label.
+        Updates the current label index, the corresponding label string,
+        and the pen color used for annotation to match the selected label.
+        
+        Args:
+            value (int): The index of the label to activate for annotation.
         """
         self.__label_index_to_annotate = value
         self.__label_to_annotate = self.labels[value]
@@ -253,43 +415,68 @@ class ImageAnnotator(QWidget):
         
     @property
     def label_to_annotate_color(self):
+        """
+        Get the color associated with the currently selected annotation label.
+        
+        Returns:
+            QColor: The color used to draw or highlight the active label.
+        """
         """Returns the label color currently selected for annotation."""
         return self.__label_to_annotate_color
         
     @property
     def label_to_annotate(self):
-        """Returns the label currently selected for annotation."""
+        """
+        Get the label currently selected for annotation.
+        
+        Returns:
+            str: The active label name used for annotating objects.
+        """
         return self.__label_to_annotate
         
     @property
     def is_floating_label(self):
-        """Returns whether floating label display mode is active."""
+        """
+        Indicates whether floating label display mode is enabled.
+        
+        Returns:
+            bool: True if floating label mode is active, False otherwise.
+        """
         return self.__is_floating_label
     
     @property
     def label_color_pairs(self):
+        """
+        Get all label and color pairs.
+        
+        Returns:
+            dict: Collection of label-color pairs used for annotation.
+        """
         return self.__label_color_pairs
     
     @label_color_pairs.setter
     def label_color_pairs(self, value):
         """
-        Sets the dictionary of label-color pairs and adjusts internal label and color mappings.
+        Set the label-color pairs and update internal label and color mappings accordingly.
         
-        This setter method:
-        - Accepts a dictionary or iterable input and sets it to the internal `__label_color_pairs` attribute.
-        - If the input is a dictionary, it directly updates the `__label_color_pairs`, `__labels`, and `__label_colors` attributes.
-        - If the input is an iterable (e.g., list of labels), it automatically generates corresponding colors based on the label indices.
-        - If the input is an integer, it generates labels from `0` to `value-1` and assigns unique colors to each label.
-        - If the input format is invalid, it raises a `ValueError` indicating that the input should either be an iterable or an integer.
+        This setter accepts different input types to configure the label-color mappings:
+        
+        - If `value` is a dictionary, it directly sets `__label_color_pairs` and updates
+          `__labels`, `__label_colors`, and `__n_labels` accordingly.
+        - If `value` is an iterable (e.g., a list of labels), it converts the labels into a list
+          and generates corresponding colors automatically.
+        - If `value` is an integer, it generates sequential numeric labels from 0 to `value - 1`
+          and assigns unique colors to each.
+        - If `value` is none of the above, a `ValueError` is raised.
         
         Args:
             value (dict, Iterable, int): 
-                - A dictionary of label-color pairs (label: color), 
-                - A list of labels to generate colors for, 
-                - Or an integer specifying the number of labels to generate with sequential numeric values.
+                - Dictionary of label-color pairs (label: color), or
+                - Iterable of labels (for which colors will be generated), or
+                - Integer specifying the number of labels to generate with numeric labels.
         
         Raises:
-            ValueError: If the input is neither an iterable nor an integer.
+            ValueError: If `value` is neither a dictionary, an iterable, nor an integer.
         """
         try:
             self.__label_color_pairs = dict(value)
@@ -306,25 +493,33 @@ class ImageAnnotator(QWidget):
                 
     @property
     def labels(self):
+        """
+        Get the list of annotation labels.
+        
+        Returns:
+            list: The current list of labels used for annotation.
+        """
         return self.__labels
     
     @labels.setter
     def labels(self, value:list):
         """
-        Sets the list of labels and generates corresponding colors for each label.
+        Set the list of labels and generate corresponding colors for each label.
         
-        This setter method:
-        - Accepts a list of labels and sets it to the internal `__labels` attribute.
-        - Calculates the number of labels (`__n_labels`) from the length of the provided list.
-        - Generates a unique color for each label using a color model based on HSV (Hue, Saturation, Value).
-        - Maps each label to its corresponding color and stores them in `__label_color_pairs`.
+        This setter:
+        - Assigns the provided list of labels to the internal `__labels` attribute.
+        - Updates the number of labels (`__n_labels`) based on the list length.
+        - Generates a unique color for each label using an HSV-based color model.
+        - Maps each label to its corresponding color in `__label_color_pairs`.
         
         Args:
-            value (list): The list of labels to set.
+            value (list): List of labels to set.
         
         Notes:
-            - The color for each label is generated based on its index using a specific HSV color scheme.
-            - The generated colors are stored in the internal attributes (`__label_colors`, `__label_color_pairs`).
+            - Colors are generated using a hue, saturation, and value (HSV) scheme
+              based on the label index and predefined HSV offsets.
+            - Generated colors are stored in `__label_colors` and paired with labels
+              in `__label_color_pairs`.
         """
         def color_from_label_index(index):
             hsv_bin_sizes = (255 - np.array(self.__hsv_offsets)) // self.__n_labels
@@ -338,39 +533,60 @@ class ImageAnnotator(QWidget):
     
     @property
     def label_colors(self):
-        """Get the list of colors assigned to each label."""
+        """
+        Get the list of colors assigned to each label.
+        
+        Returns:
+            list(QColor): Colors corresponding to each label.
+        """
         return self.__label_colors
     
     @property
     def n_labels(self):
-        """Get the total number of labels."""
+        """
+        Get the total number of labels.
+        
+        Returns:
+            int: Number of labels currently defined.
+        """
         return self.__n_labels
     
     @property
     def corner_label_attached_to_bounding_box(self):
-        """Check if the corner label is attached to the bounding box."""
+        """
+        Check whether the corner label is attached to the bounding box.
+        
+        Returns:
+            bool: True if the corner label is attached, False otherwise.
+        """
         return self.__corner_label_attached_to_bounding_box
         
     @property
     def image(self):
-        """Get the currently loaded image."""
+        """
+        Get the currently loaded image.
+        
+        Returns:
+            QPixmap: The current image used for annotation.
+        """
         return self.__image
     
     @image.setter
     def image(self, value:QPixmap):
         """
-        Sets the image and adjusts the internal parameters based on the new image.
+        Set the image to be annotated and adjust internal parameters accordingly.
         
-        This setter method:
-        - Sets the internal `__image` attribute to the provided `QPixmap`.
-        - Stores the original shape of the image in `__original_array_shape` (height and width).
-        - If the provided `QPixmap` is null (doesn't exist in `image_path`), a blank white image is created to ensure a valid image is set.
-        - Calculates the `__scale_factor` based on the current widget size and the image width.
-        - Scales the image to fit the widget size while maintaining the aspect ratio, using smooth transformation.
-        - Resizes the widget to match the scaled image size.
+        This setter:
+        - Assigns the provided QPixmap to the internal `__image` attribute.
+        - Records the original image dimensions (height and width) in `__original_array_shape`.
+        - If the provided QPixmap is null (e.g., no image loaded), creates a blank white image
+          matching the widget size to ensure a valid image is set.
+        - Calculates the scaling factor based on the widget’s width relative to the image width.
+        - Scales the image to fit the widget size while preserving aspect ratio, using smooth transformation.
+        - Resizes the widget to the scaled image size.
         
         Args:
-            value (QPixmap): The QPixmap representing the new image to set.
+            value (QPixmap): The new image to set.
         """
         self.__image = value
         self.__original_array_shape = [value.height(), value.width()]
@@ -384,134 +600,106 @@ class ImageAnnotator(QWidget):
     
     @property
     def annotation_overlay(self):
-        """Get the current annotation overlay (QPixmap)."""
+        """
+        Get the current annotation overlay.
+        
+        Returns:
+            QPixmap: The current annotation overlay pixmap.
+        """
         return self.__annotation_overlay
     
     @annotation_overlay.setter
     def annotation_overlay(self, value:QPixmap):
         """
-        Sets the annotation layer with the provided QPixmap, resizing it to match the size of the image.
+        Set the annotation overlay with the provided QPixmap, resizing and aligning it to the current image size.
         
-        This setter method:
-        - Initializes the internal `__annotation_overlay` attribute as a transparent QPixmap with the same size as the image.
-        - Uses a QPainter to draw the provided `value` (a QPixmap) onto the newly created `__annotation_overlay`.
-        - The `value` QPixmap is copied onto the transparent layer at position (0, 0), ensuring the annotation layer is correctly aligned with the image.
+        This setter:
+        - Initializes the internal `__annotation_overlay` as a transparent QPixmap matching the image size.
+        - Uses a QPainter to draw the given `value` QPixmap onto the transparent overlay at position (0, 0).
+        - Ensures that the annotation overlay is correctly aligned and sized with respect to the image.
         
         Args:
-            value (QPixmap): The QPixmap to set as the annotation layer. This is drawn onto a transparent QPixmap with the size matching the image.
-        
+            value (QPixmap): The QPixmap to set as the annotation overlay.
+            
         Notes:
-            - The `annotation` layer is reset to a transparent QPixmap each time this setter is called.
-            - The method ensures that the annotation is positioned correctly by using QPainter to render the `value` QPixmap.
+            - The annotation overlay is reset to a transparent layer each time this setter is called.
+            - QPainter is used to composite the provided pixmap onto the transparent overlay.
         """
         self.initialize_overlay('annotation')
         painter = QPainter(self.__annotation_overlay)
         painter.drawPixmap(0, 0, QPixmap(value))
         painter.end()
-    
+        
     @property
-    def annotation_path(self):
-        """Get the path to the annotation file to be used by the CV model."""
-        return self.__annotation_path
-    
-    @annotation_path.setter
-    def annotation_path(self, value:str):
+    def bounding_boxes(self):    
         """
-        Sets the annotation path, determines the type of annotations (bounding boxes or segment masks),
-        and loads the corresponding annotations.
-        
-        This setter method:
-        - Sets the internal `__annotation_path` to the provided value.
-        - Determines whether to use bounding boxes or labelled segment masks based on the file extension (`.txt` for bounding boxes, `.npy` for segment masks).
-        - If bounding boxes are used:
-            - Attempts to read and parse the `.txt` file into bounding box data, storing it in `__bounding_boxes`.
-            - Raises an error if the file is empty or cannot be loaded.
-        - If labelled segment masks are used:
-            - Loads the corresponding `.npy` file containing the segment masks into `labelled_segment_masks`.
-        - In case of errors (e.g., file not found, empty file, etc.), logs the error and clears any existing annotations.
-        - Calls the `__annotate_user_interface_update_routine` method to refresh the annotations after setting the path.
-        
-        Args:
-            value (str): The file path to the annotation data, either a `.txt` file for bounding boxes or a `.npy` file for labelled segment masks.
-        
-        Notes:
-            - The method differentiates between bounding box annotations and segment mask annotations based on the file extension.
-            - If an error occurs while reading the file, the annotations are cleared and a fresh start is initiated.
+        Get the bounding boxes used for annotation.
+    
+        Returns:
+            list or dict: The current bounding boxes defining annotated regions.
         """
-        self.__annotation_path = value
-        self.__use_bounding_boxes = os.path.splitext(value)[-1].lower().strip() == '.txt'
-        try:
-            if self.__use_bounding_boxes:
-                with open(value) as file:
-                    lines = file.readlines()
-                table = [line.strip().split() for line in lines if line.strip()]
-                assert len(table) > 0, 'Empty annotations file...'
-                self.__bounding_boxes = np.int32(table)
-            else:
-                self.__path_to_labelled_segment_masks = os.path.splitext(value)[0] + '.npy'
-                self.labelled_segment_masks = np.load(self.__path_to_labelled_segment_masks)
-        except FileNotFoundError:
-            self.log('No annotations existing, starting afresh...')
-            self.__clear_annotations()
-        finally:
-            self.__annotate_user_interface_update_routine()
-            
-    @property
-    def use_bounding_boxes(self):
-        """Get the flag indicating whether bounding boxes are used for annotations."""
-        return self.__use_bounding_boxes
-        
-    @property
-    def bounding_boxes(self):
-        """Get the bounding boxes used for annotation."""
         return self.__bounding_boxes
     
     @property
     def labelled_segment_masks(self):
-        """Get the labelled segment masks for annotations."""
+        """
+        Get the labelled segment masks for annotations.
+        
+        Returns:
+            list or array: Masks where each segment is labeled for annotation purposes.
+        """
         return self.__labelled_segment_masks
     
     @labelled_segment_masks.setter
     def labelled_segment_masks(self, value:np.ndarray):
         """
-        Sets the labelled segment masks, sorts them by segment area, and updates the overall segment mask.
+        Set the labelled segment masks and update the combined segment mask.
         
-        This setter method:
-        - Computes the areas of each segment in the provided `value` array using the `compute_segment_areas` function.
-        - Sorts the segments by their areas in ascending order.
-        - Combines the sorted segment masks into a single mask.
+        This setter:
+        - Accepts a 3D numpy array representing the labelled segment masks.
+        - Combines the sorted segment masks into a single overall mask.
         
         Args:
-            value (np.ndarray): A 3D numpy array containing the labelled segment masks.
+            value (np.ndarray): 3D array containing the labelled segment masks.
         """
-        areas = compute_segment_areas(value)
-        self.__labelled_segment_masks = value[np.argsort(areas)]
+        self.__labelled_segment_masks = value
         self.__overall_segment_mask = self.__combine_labelled_segment_masks()
     
     @property
     def overall_segment_mask(self):
-        """Get the overall segment mask that combines all labelled segment masks."""
+        """
+        Get the combined segment mask that merges all labelled segment masks.
+        
+        Returns:
+            np.ndarray: The overall combined segment mask.
+        """
         return self.__overall_segment_mask
     
     @property
     def label_index_accumulator(self):
-        """Floating-point accumulator for label scrolling."""
+        """
+        Get the floating-point accumulator used for smooth label scrolling.
+        
+        Returns:
+            float: The current value of the label index accumulator.
+        """
         return self.__label_index_accumulator
     
     @label_index_accumulator.setter
     def label_index_accumulator(self, value:float):
         """
-        Sets the label index accumulator and updates the active label index for annotation.
+        Set the label index accumulator and update the active label index for annotation.
         
-        Functionality:
-        - Wraps the floating-point accumulator value within the total number of labels using modulo.
-        - Calculates the integer label index to annotate, with a safeguard against floating-point 
-          quantization errors (e.g., ensuring 31.999999... correctly maps to 31 when flooring, not 32).
-        - If label slider mode is enabled, logs the label index and corresponding label name.
+        This setter:
+        - Wraps the floating-point accumulator value modulo the total number of labels,
+          ensuring it stays within valid bounds.
+        - Computes the integer label index to annotate, with safeguards against floating-point
+          rounding errors (e.g., ensuring values like 31.999999 map correctly to 31).
+        - If label slider mode is enabled, logs the current accumulator value along with
+          the active label index and label name.
         
-        Parameters:
-            value (float): The new value for the label index accumulator, which can be fractional 
-                           to allow smooth scrolling or adjustments.
+        Args:
+            value (float): New accumulator value, can be fractional to enable smooth scrolling or adjustments.
         """
         self.__label_index_accumulator = value % self.n_labels
         self.label_index_to_annotate = int(value % self.n_labels) % self.n_labels # To avoid quantization error issues when flooring (e.g. 31.99999999999 gives 32 not 31)
@@ -520,21 +708,26 @@ class ImageAnnotator(QWidget):
       
     @property
     def pen_width_multiplier_accumulator(self):
-        """Floating-point accumulator for pen width scrolling."""
+        """
+        Get the floating-point accumulator used for pen width adjustments.
+        
+        Returns:
+            float: The current value of the pen width multiplier accumulator.
+        """
         return self.__pen_width_multiplier_accumulator
     
     @pen_width_multiplier_accumulator.setter
     def pen_width_multiplier_accumulator(self, value:float):
         """
-        Sets the pen width multiplier accumulator and updates the effective pen width.
+        Set the floating-point accumulator for pen width adjustments and update the pen width multiplier.
         
-        Functionality:
-        - Clamps the accumulator value to the [0.0, 1.0] range.
-        - Computes the actual pen width multiplier based on the clamped value and the maximum allowed multiplier.
-        - Logs the updated pen width multiplier if the label slider mode is not enabled (to avoid unintended logs during initialization or label adjustments).
+        This setter:
+        - Clamps the input value between 0.0 and 1.0.
+        - Calculates the pen width multiplier as a scaled value between 1 and the maximum allowed multiplier.
+        - Logs the updated pen width multiplier if label slider mode is not enabled.
         
-        Parameters:
-            value (float): A normalized value (typically between 0 and 1) representing the percentage of desired maximum pen width multiplier to be applied for pen resizing.
+        Args:
+            value (float): The new pen width multiplier accumulator, expected in the range [0.0, 1.0].
         """
         self.__pen_width_multiplier_accumulator = 0.0 if value < 0.0 else 1.0 if value > 1.0 else value
         self.pen_width_multiplier = 1 + self.__pen_width_multiplier_accumulator * (self.maximum_pen_width_multiplier - 1)
@@ -543,62 +736,73 @@ class ImageAnnotator(QWidget):
         
     @property
     def pen_width_multiplier(self):
-        """The current multiplier applied to the base pen width."""
+        """
+        Get the current pen width multiplier.
+        
+        Returns:
+            float: The current multiplier applied to the pen width.
+        """
         return self.__pen_width_multiplier
     
     @pen_width_multiplier.setter
     def pen_width_multiplier(self, value:float):
         """
-        Sets the pen width multiplier and resizes the annotation pen accordingly.
-    
-        Parameters:
-            value (float): The new pen width multiplier to apply.
+        Set the pen width multiplier and update the pen size accordingly.
+        
+        Args:
+            value (float): The new pen width multiplier.
         """
         self.__pen_width_multiplier = value
         self.__resize_pen()
         
     def save(self):
         """
-        Saves the current annotations to disk.
-    
+        Save the current annotations to disk.
+        
         Behavior:
-        - If using bounding boxes:
+        - If bounding boxes are used:
             - Saves annotations as a plain text `.txt` file.
-            - Each line represents one bounding box, written in space-separated string format.
-        - If using segmentation masks:
+            - Each line corresponds to one bounding box, formatted as space-separated values.
+        - If semantic segmentation masks are used:
             - Saves the raw labelled segment masks as a `.npy` file.
-            - Computes the overall segment mask and applies label shifting or void boundary tracing
-              using `self.postprocess_overall_segment_mask_for_saving()`.
-            - Saves the final processed mask as a `.png` image.
-    
+            - Processes the overall segment mask with label shifting and void boundary tracing
+              via `Helper.postprocess_overall_segment_mask_for_saving()`.
+            - Saves the processed mask as a `.png` image.
+        
         Notes:
-            - The save directory is automatically created if it does not exist.
-            - The postprocessing step ensures label 0 is reserved for background if `void_background` is False,
-              and boundaries around segments are properly traced as void (label 255), otherwise, both 
-              the background and segment boundaries are labelled as void.
-    
+        - The save directory is created automatically if it does not exist.
+        - The postprocessing ensures label 0 is reserved for the void/background if `void_background` is False,
+          and properly traces segment boundaries.
+        
         Raises:
-            OSError: If writing to the specified path fails due to permission or filesystem issues.
+            OSError: If saving fails due to file permission or filesystem errors.
         """
-        directory_path = os.path.dirname(self.annotation_path)
-        os.makedirs(directory_path, exist_ok=True)
         if self.use_bounding_boxes:
+            os.makedirs(os.path.dirname(self.bounding_boxes_filepath), exist_ok=True)
             lines = [' '.join(row)+'\n' for row in self.bounding_boxes.astype(str)]
-            with open(self.annotation_path, 'w') as file:
+            with open(self.bounding_boxes_filepath, 'w') as file:
                 file.writelines(lines)
-        else:
+            self.log(f'Annotations saved to "{self.bounding_boxes_filepath}"')
+                
+        if self.use_semantic_segments:
+            os.makedirs(os.path.dirname(self.semantic_segments_filepath), exist_ok=True)
             np.save(self.__path_to_labelled_segment_masks, self.labelled_segment_masks)
             overall_segment_mask_to_save = self.postprocess_overall_segment_mask_for_saving()
-            imsave(self.annotation_path, overall_segment_mask_to_save)
-        absolute_file_path = os.path.abspath(self.annotation_path)
-        self.log(f'Annotations saved to "{absolute_file_path}"')
+            imsave(self.semantic_segments_filepath, overall_segment_mask_to_save)
+            self.log(f'Annotations saved to "{self.semantic_segments_filepath}"')
+            
     
     def log(self, message:str):
         """
-        Print a log message if verbosity is enabled.
-
+        Print a log message to the console if verbose mode is enabled.
+        
+        This method:
+        - Clears the previous message from the console by overwriting it with spaces.
+        - Prints the new message in place (using carriage return to overwrite the same line).
+        - Updates the stored previous message to the current one for next overwrite.
+        
         Args:
-            message (str): Message to print.
+            message (str): The message to print.
         """
         if self.__verbose:
             print(' ' * len(self.__previous_message), end='\r')
@@ -607,18 +811,20 @@ class ImageAnnotator(QWidget):
         
     def __combine_labelled_segment_masks(self):
         """
-        Merges all labelled segment masks into a single composite mask.
-    
+        Merge all labelled segment masks into a single composite mask.
+        
         Behavior:
-        - Uses a custom `merge()` function to overlay masks:
-            - For each pixel in `mask_a` that is labelled (i.e., not 255),
-              its value overwrites the corresponding pixel in `mask_b`.
-            - This gives priority to earlier masks in the sequence when overlapping occurs.
-        - If no labelled masks are present, returns a blank mask filled with 255 (void label).
-    
+        - Defines a helper `merge()` function that overlays one mask onto another by copying all
+          labelled pixels (non-255) from the first mask onto the second mask at the same locations.
+          This prioritizes earlier masks in the sequence.
+        - Applies `reduce(merge, masks)` to combine all segment masks into one.
+        - Converts the combined mask to `uint8`.
+        - If no masks are present, returns an array filled with 255 (void label) matching the original image shape.
+        - Note: The method assumes that label value 255 represents void/unlabeled areas.
+        
         Returns:
-            np.ndarray: A `uint8` array representing the merged segment mask.
-                        Annotated regions retain their original labels; unannotated regions are 255.
+            np.ndarray: A uint8 numpy array representing the combined labelled segment mask, where
+                        each pixel's value corresponds to the label or 255 for void.
         """
         def merge(mask_a, mask_b):
             annotated_portion_in_mask_a = mask_a != 255
@@ -633,7 +839,18 @@ class ImageAnnotator(QWidget):
         return np.zeros(self.__original_array_shape, 'uint8') + 255
     
     def __resize_user_interface_update_routine(self):
-        """Handle window resize events, rescaling images and updating annotation layers."""
+        """
+        Handle window resize events by rescaling images and updating all related annotation layers.
+        
+        This routine performs the following steps:
+        - Reloads and rescales the main image to fit the new window size.
+        - Retraces existing annotations to align with the resized image.
+        - Updates the drawing and pen tracer overlays to maintain correct appearance.
+        - Combines all layers and refreshes the displayed image.
+        - Updates label display elements to reflect the resized interface.
+        - Adjusts the pen size proportionally to the new scale.
+        - Resets the internal resize flag to indicate completion.
+        """
         self.__reload_image()
         self.__retrace_annotations()
         self.__update_drawing_overlay()
@@ -644,32 +861,59 @@ class ImageAnnotator(QWidget):
         self.__resize_flag = False
         
     def __annotate_user_interface_update_routine(self):
-        """Update the annotation overlay and label displays after changes."""
+        """
+        Update the user interface to reflect changes in annotations.
+        
+        This routine:
+        - Retraces existing annotations to ensure they are up to date.
+        - Combines annotation layers and updates the displayed image accordingly.
+        - Refreshes the contents of label display elements to match the current annotation state.
+        """
         self.__retrace_annotations()
         self.__combine_layers_and_update_image_display()
         self.__update_contents_of_label_displays()
-    
+        
     def __reload_image(self):
-        """Reload the original image without affecting current annotations."""
-        self.image_path = self.image_path
-    
+        """
+        Reload the current image from the stored image file path.
+        
+        This method refreshes the image by reassigning the `image_filepath` property,
+        triggering any associated loading and processing logic.
+        """
+        self.image_filepath = self.image_filepath
+        
     def __retrace_annotations(self):
-        """Clear overlay layer and redraw all annotations (bounding boxes or masks)."""
+        """
+        Redraw annotations on the overlay based on the current annotation mode.
+        
+        Behavior:
+        - Clears the current annotation overlay.
+        - If using bounding boxes (and not semantic segments), retraces bounding boxes.
+        - Otherwise, retraces semantic segment annotations.
+        """
         self.annotation_overlay = None
-        if self.__use_bounding_boxes:
+        if self.use_bounding_boxes and not self.use_semantic_segments:
             self.__trace_bounding_boxes()
         else:
             self.__trace_segments()
             
     def __trace_bounding_boxes(self):
         """
-        Draws bounding boxes on the image and optionally labels them with the corresponding label names.
+        Draw bounding boxes and optionally corner labels on the annotation overlay.
         
-        The method iterates over all the bounding boxes and draws them on the annotation layer:
-        - Each bounding box is drawn with a color corresponding to its label.
-        - If the `corner_label_attached_to_bounding_box` flag is set, the label for the bounding box is displayed at its corner.
-        
-        The bounding box dimensions are scaled according to the current scale factor, and the label text is displayed with a white font on a background matching the label's color.
+        Behavior:
+        - Initializes QPainter with the current annotation overlay.
+        - Sets pen and brush styles based on the annotation pen properties.
+        - Adjusts pen width relative to the minimum pen width for consistent scaling.
+        - If `corner_label_attached_to_bounding_box` is True:
+            - Sets the font size scaled by the current image scale factor.
+            - Draws a filled rectangle near the bounding box corner displaying the label text.
+            - Uses label color as background and white for the text for contrast.
+        - For each bounding box:
+            - Extracts the label index and bounding box dimensions.
+            - Scales the bounding box coordinates according to the current scale factor.
+            - Draws the bounding box rectangle with the corresponding label color.
+            - Optionally draws the label text box in the top-left corner of the bounding box.
         """
         painter, pen, brush = QPainter(self.annotation_overlay), QPen(self.__annotation_pen), QBrush(Qt.Dense7Pattern)
         pen.setWidthF(self.__annotation_pen.widthF() / self.__minimum_pen_width)
@@ -677,7 +921,7 @@ class ImageAnnotator(QWidget):
             font_size = int(self.__label_font_size * self.__scale_factor)
             font = QFont('Arial', font_size)
             painter.setFont(font)
-            
+        
         for bounding_box in self.bounding_boxes:
             label_index, dimensions = bounding_box[0], bounding_box[1:]
             dimensions = np.int32(dimensions * self.__scale_factor)
@@ -698,15 +942,12 @@ class ImageAnnotator(QWidget):
     
     def __trace_segments(self):
         """
-        Traces and generates the annotation layer for the segmented image, applying colors based on the labels.
-        
-        This method performs the following steps:
-        - Prepares an RGBA lookup table based on the label colors and the opacity setting.
-        - Resizes the overall segment mask to match the current image dimensions.
-        - Uses the lookup table to map segment mask values to RGBA colors.
-        - Converts the resulting RGBA array into a QPixmap and stores it in the `annotation_overlay` attribute.
-        
-        The resulting `annotation_overlay` is used to display the segmented image with colors corresponding to different labels.
+        Render the semantic segmentation overlay using label colors and opacity.
+    
+        - Prepares an RGBA lookup table based on label colors and global opacity.
+        - Resizes the overall segment mask to match the current widget dimensions.
+        - Maps each pixel in the mask to its RGBA color using the lookup table.
+        - Converts the resulting RGBA image to a QPixmap and stores it as the annotation overlay.
         """
         def prepare_rgba_lookup_table():
             alpha = int(self.__opacity * 255)
@@ -724,15 +965,11 @@ class ImageAnnotator(QWidget):
     
     def __combine_layers_and_update_image_display(self):
         """
-        Combines the base image, drawing layer, and optional pen tracer overlay into a single QPixmap,
-        then updates the image display widget.
+        Composite the image with annotation, drawing, and pen tracer overlays, then update the display.
         
-        This method performs the following steps:
-        - Creates a compound QPixmap from the original image.
-        - Uses QPainter to draw the current drawing layer onto the compound image.
-        - Draws a drawing overlay after it is initialized.
-        - Draws an additional pen tracer overlay after it is initialized.
-        - Updates the GUI's image display with the resulting composed image.
+        - Stacks the base image with the annotation overlay (segmentation or boxes).
+        - Includes the drawing overlay and pen tracer if they exist.
+        - Updates the QLabel display with the final composited image.
         """
         compound_layer = QPixmap(self.image)
         painter = QPainter(compound_layer)
@@ -746,35 +983,46 @@ class ImageAnnotator(QWidget):
         
     @property
     def drawing_overlay(self):
-        """Drawing overlay to draw over."""
+        """
+        Get the overlay layer used for live drawing annotations.
+        
+        Returns:
+            QPixmap: The current drawing overlay.
+        """
         return self.__drawing_overlay
         
     @property
     def pen_tracer_overlay(self):
-        """Tracer overlay to draw the circle over the pen tip."""
+        """
+        Get the overlay that visually traces the pen cursor during interaction.
+        
+        Returns:
+            QPixmap: The pen tracer overlay used for previewing pen position and size.
+        """
         return self.__pen_tracer_overlay
         
     def __get_mask_for_annotations_hovered_over(self):
+        
         """
-        Retrieves a mask indicating which annotations are currently hovered over by the cursor.
+        Compute a boolean mask indicating which annotations are currently hovered over by the cursor.
         
-        The method generates a mask that marks annotations under the cursor’s position:
-        
-        - If bounding boxes are used, it checks if the cursor is within the bounds of each bounding box.
-        - If segment masks are used, it checks if the cursor is within any segment by verifying the pixel value at the cursor’s position.
+        - For bounding boxes enabled (and not semantic segments): checks if the cursor lies within each box.
+        - For segment masks: checks if the cursor overlaps with any non-background pixel in the masks.
+        - Chooses logic based on whether bounding boxes or semantic segments are in use.
         
         Returns:
-            np.ndarray: A boolean mask where each element corresponds to an annotation, indicating whether it is hovered over by the cursor.
+            np.ndarray: A boolean array where True indicates the annotation is under the cursor.
         
         Notes:
             - The method returns a boolean array where `True` indicates that the annotation is hovered over, and `False` otherwise.
             - If no annotations are present or the cursor is not hovering over any annotation, the returned mask will be all `False`.
         """
-        annotation_hover_mask = np.zeros(self.bounding_boxes.shape[0] if self.use_bounding_boxes else self.labelled_segment_masks.shape[0], bool)
+        annotation_hover_mask_shape = self.bounding_boxes.shape[0] if self.use_bounding_boxes and not self.use_semantic_segments else self.labelled_segment_masks.shape[0]
+        annotation_hover_mask = np.zeros(annotation_hover_mask_shape, bool)
         annotations_exist = bool(annotation_hover_mask.size)
         if annotations_exist:
             y_cursor, x_cursor = self.__yx_cursor_within_original_image
-            if self.use_bounding_boxes:
+            if self.use_bounding_boxes and not self.use_semantic_segments:
                 for index, (_, x_offset, y_offset, width, height) in enumerate(self.bounding_boxes):
                     annotation_hover_mask[index] = \
                         y_offset <= y_cursor <= y_offset + height and \
@@ -785,18 +1033,17 @@ class ImageAnnotator(QWidget):
     
     def __get_mask_for_smallest_annotation_hovered_over(self):
         """
-        Retrieves the mask for the smallest annotation currently hovered over by the cursor.
+        Identify the smallest annotation currently hovered over by the cursor.
         
-        This method checks which annotations are under the cursor and determines the smallest one based on its area:
-        
-        - If bounding boxes are used, the area is calculated as the product of the bounding box dimensions.
-        - If segment masks are used, the area is computed using a helper function from `.utils`.
-        
-        The method returns a mask corresponding to the smallest hovered annotation.
+        - If only one annotation is hovered, returns that directly.
+        - For multiple hovered annotations:
+            - Computes area of each bounding box (if semantic segments are not enabled) or segment.
+            - Selects the one with the smallest area.
+            - Returns a boolean mask selecting only that annotation.
         
         Returns:
-            np.ndarray: A boolean mask indicating the smallest annotation hovered over, or an empty mask if no annotation is hovered over.
-        
+            np.ndarray: A boolean mask where only the smallest hovered annotation is marked True.
+            
         Notes:
             - The method compares annotations based on their area and returns a mask for the smallest one.
             - If no valid annotation is found under the cursor, it returns an empty mask.
@@ -804,61 +1051,54 @@ class ImageAnnotator(QWidget):
         annotation_hover_mask = self.__get_mask_for_annotations_hovered_over()
         if annotation_hover_mask.sum() < 2:
             return annotation_hover_mask
-        annotations = self.bounding_boxes if self.use_bounding_boxes else self.labelled_segment_masks
+        annotations = self.bounding_boxes if self.use_bounding_boxes and not self.use_semantic_segments else self.labelled_segment_masks
         annotations_to_inspect = annotations[annotation_hover_mask]
-        if self.use_bounding_boxes:
+        if self.use_bounding_boxes and not self.use_semantic_segments:
             areas = np.prod(annotations_to_inspect[:,-2:], axis=1)
         else:
             areas = compute_segment_areas(annotations_to_inspect)
         index_of_interest = np.argmin(areas)
-        smallest_annotation_hover_mask = (annotations == annotations_to_inspect[index_of_interest]).all(axis=1 if self.use_bounding_boxes else (1,2))
+        smallest_annotation_hover_mask = (annotations == annotations_to_inspect[index_of_interest]).all(axis=1 if self.use_bounding_boxes and not self.use_semantic_segments else (1,2))
         return smallest_annotation_hover_mask
     
     def __drop_smallest_annotation_hovered_over(self):
         """
-        Drops the smallest annotation currently hovered over by the cursor.
-    
-        This method generates a mask for the smallest annotation under the cursor and removes it from the collection of annotations:
+        Remove the smallest annotation currently under the cursor.
         
-        - If bounding boxes are used, it removes the corresponding bounding box from the list.
-        - If segment masks are used, it removes the corresponding segment mask from the array.
-    
+        - Uses the smallest hovered annotation mask to identify the target.
+        - Removes it from either the bounding box list or segmentation mask array, or both.
+        - Skips removal if no hovered annotation is found.
+        
         Returns:
-            bool: True if an annotation was successfully removed, False if no annotation was hovered over or removed.
-    
+            bool: True if an annotation was removed, False otherwise.
+            
         Notes:
-            - The method checks for the smallest annotation under the cursor and removes it based on the current configuration (bounding boxes or segment masks).
+            - The method checks for the smallest annotation under the cursor and removes it based on the current configuration (bounding boxes or segment masks or both).
             - The method returns `True` if an annotation was removed, and `False` if no annotation was found or removed.
         """
         smallest_annotation_hover_mask = self.__get_mask_for_smallest_annotation_hovered_over()
         if smallest_annotation_hover_mask.any():
             if self.use_bounding_boxes:
                 self.__bounding_boxes = self.bounding_boxes[~smallest_annotation_hover_mask]
-            else:
+            if self.use_semantic_segments:
                 self.labelled_segment_masks = self.labelled_segment_masks[~smallest_annotation_hover_mask]
             return True
         return False
     
     def __get_label_index_hovered_over(self):
         """
-        Retrieves the label index of the smallest annotation currently hovered over by the cursor.
+        Get the label index of the smallest annotation currently under the cursor.
         
-        This method checks for the smallest annotation under the cursor by generating a mask and then determines
-        the label index based on whether bounding boxes or segment masks are used:
-        
-        - If bounding boxes are used, it returns the index of the first label in the smallest hovered bounding box.
-        - If segment masks are used, it returns the label index of the smallest hovered segment mask that is not empty (i.e., excluding the background).
+        - For bounding boxes are enabled (and not semantic segments): returns the label index of the hovered box.
+        - For segments: returns the label index of the hovered mask (excluding background 255).
+        - Returns -1 if no annotation is hovered.
         
         Returns:
-            int: The index of the label hovered over, or -1 if no annotation is hovered over.
-        
-        Notes:
-            - If no annotation is detected under the cursor, the method returns -1.
-            - The method handles both bounding boxes and segment masks based on the current configuration.
+            int: Index of the hovered label, or -1 if none is detected.
         """
         smallest_annotation_hover_mask = self.__get_mask_for_smallest_annotation_hovered_over()
         if smallest_annotation_hover_mask.any():
-            if self.use_bounding_boxes:
+            if self.use_bounding_boxes and not self.use_semantic_segments:
                 smallest_annotation_hovered_over = self.bounding_boxes[smallest_annotation_hover_mask].squeeze()
                 return smallest_annotation_hovered_over[0]
             else:
@@ -869,36 +1109,31 @@ class ImageAnnotator(QWidget):
     
     def __clear_annotations(self):
         """
-        Clears all annotations from the drawing, either by resetting bounding boxes or labelled segment masks.
+        Remove all current annotations from the scene.
         
-        If bounding boxes are used:
-            - Resets the bounding boxes array to an empty array with shape (0, 5), which represents no bounding boxes.
-        
-        If bounding boxes are not used:
-            - Resets the labelled segment masks array to an empty array with the same shape as the original array, representing no segment masks.
-        
-        This method effectively removes all annotations from the image or drawing.
+        - Clears bounding boxes if enabled.
+        - Clears semantic segment masks if enabled.
         """
         if self.use_bounding_boxes:
             self.__bounding_boxes = np.empty([0, 5], 'int32')
-        else:
+            
+        if self.use_semantic_segments:
             self.labelled_segment_masks = np.empty([0] + self.__original_array_shape, 'int32')
         
     def __draw(self, current_position:QPoint, mode:str):
         """
-        Draws either a point or a line on the drawing based on the specified mode.
+        Draw a point or line on the drawing overlay at the specified position.
         
-        If the mode is 'point', draws a point at the current position.
-        If the mode is 'line', draws a line from the last recorded position to the current position.
-        
-        The method raises a ValueError if an invalid mode is provided.
+        - In 'point' mode, draws a dot at the given position.
+        - In 'line' mode, draws a line from the last recorded pen position.
+        - If erasing mode is active, draws with transparency to clear annotations.
         
         Args:
-            current_position (QPoint): The current position where the drawing action should take place.
-            mode (str): The drawing mode, either 'point' or 'line'. 'point' draws a single point, 'line' draws a line from the last position to the current one.
+            current_position (QPoint): The current cursor position on the widget.
+            mode (str): Drawing mode, either 'point' or 'line'.
         
         Raises:
-            ValueError: If the mode is not 'point' or 'line'.
+            ValueError: If mode is not 'point' or 'line'.
         """
         if mode not in {'point', 'line'}:
             raise ValueError("The argument `mode` can either take the value of 'point' or 'line'.")
@@ -919,19 +1154,17 @@ class ImageAnnotator(QWidget):
         
     def __configure_label_display(self, label_display:QLabel, label_index:int, hovering:bool):
         """
-        Configures the display of a label in a QLabel widget based on the label index and hovering state.
-    
-        If the label index is invalid (negative) or erasing is active and not hovering:
-            - Sets the label text to 'N/A' and the background to transparent.
-    
-        Otherwise, it sets the label text to the corresponding label from the list and the background color to the label's color.
-    
-        The label text is padded to align properly with the maximum text length of all labels.
-    
+        Configure the QLabel to show the current label text and background color.
+        
+        - If label_index is invalid (< 0) or erasing mode is active without hovering,
+          sets the label text to 'N/A' and background to transparent.
+        - Otherwise, sets the label text and background color according to the label index.
+        - Aligns the label text padding based on the maximum label length for consistent display.
+        
         Args:
-            label_display (QLabel): The QLabel widget where the label text and style will be applied.
-            label_index (int): The index of the label to display, used to retrieve the label text and color.
-            hovering (bool): Indicates whether the mouse is hovering over a label for interaction.
+            label_display (QLabel): The QLabel widget to update.
+            label_index (int): The index of the label to display.
+            hovering (bool): Whether the user is hovering over the label.
         """
         if label_index < 0 or (self.erasing and not hovering):
             text = 'N/A'
@@ -945,14 +1178,14 @@ class ImageAnnotator(QWidget):
         
     def __update_positions_of_label_displays(self):
         """
-        Updates the on-screen label display elements, including their positions.
+        Update the screen positions of the floating label display widgets.
         
-        This method orchestrates:
-        - Positioning of the floating label displays (annotation target label and hovered label),
-          depending on cursor position or fixed layout.
-        
-        Called during cursor updates, label changes, and redraw events to ensure accurate and
-        visually consistent label feedback for the user.
+        - If there is a recorded last pen position and floating labels are enabled,
+          positions the label displays near the pen cursor with predefined offsets.
+        - Otherwise, positions the labels at the top-right corner of the widget,
+          aligning them vertically stacked.
+        - Moves both `__label_to_annotate_display` and `__label_annotated_display`
+          widgets to their calculated coordinates.
         """
         if self.__last_pen_position and self.is_floating_label:
             x_offset = self.__last_pen_position.x() + self.__floating_label_display_offsets[0]
@@ -965,15 +1198,16 @@ class ImageAnnotator(QWidget):
         
     def __update_contents_of_label_displays(self):
         """
-        Updates the on-screen label display element contents.
+        Update the text and appearance of label display widgets.
         
-        This method orchestrates:
-        - Updating the displayed label names and their formatting based on the current annotation
-          label index and the label currently under the cursor.
-        - Ensuring that both label displays share a consistent width after initial configuration.
+        - Determines the label index currently hovered over by the cursor.
+        - Configures the label-to-annotate display using the active label index.
+        - Configures the annotated label display using the hovered label index.
+        - On first update, synchronizes the widths of both label displays for consistent UI appearance.
         
-        Called during cursor updates, label changes, and redraw events to ensure accurate and
-        visually consistent label feedback for the user.
+        Notes:
+            This method ensures that label displays show the correct label text and styling 
+            based on user interaction (hover and active annotation label).
         """
         self.__label_index_hovered_over = self.__get_label_index_hovered_over()
         self.__configure_label_display(self.__label_to_annotate_display, self.label_index_to_annotate, False)
@@ -986,37 +1220,37 @@ class ImageAnnotator(QWidget):
             
     def __update_label_displays(self):
         """
-        Updates the on-screen label display elements, including both their content and position.
+        Refresh label display positions and contents.
         
-        This method orchestrates:
-        - Positioning of the floating label displays (annotation target label and hovered label),
-          depending on cursor position or fixed layout.
-        - Updating the displayed label names and their formatting based on the current annotation
-          label index and the label currently under the cursor.
-        - Ensuring that both label displays share a consistent width after initial configuration.
+        - Updates the position of label display widgets relative to the current pen position or widget size.
+        - Updates the displayed text and styling of label widgets to reflect current annotation and hover states.
         
-        Called during cursor updates, label changes, and redraw events to ensure accurate and
-        visually consistent label feedback for the user.
+        This method ensures the label UI is kept in sync with user interaction and layout changes.
         """
         self.__update_positions_of_label_displays()
         self.__update_contents_of_label_displays()
             
     def __reconfigure_label_annotated_display(self):
         """
-        Update only the hovered label display.
+        Update the annotated label display based on the current hover state.
         
-        - Refreshes the label information under the current mouse position.
-        - Does not reposition any floating labels or change layout.
+        - Retrieves the label index currently hovered over by the user.
+        - Configures the annotated label display widget with the hovered label's text and color.
+        
+        This ensures that the label display dynamically reflects user interaction.
         """
         self.__label_index_hovered_over = self.__get_label_index_hovered_over()
         self.__configure_label_display(self.__label_annotated_display, self.__label_index_hovered_over, True)
     
     def __resize_pen(self):
         """
-        Dynamically adjust the drawing pen width based on window size.
+        Adjust the annotation pen width dynamically based on the widget's current width.
         
-        - Scales the annotation pen width proportionally relative to the initial minimum widget width and the pen width multiplier.
-        - Ensures that the pen stays visually consistent across different window resize events.
+        - Computes the ratio of the current widget width to its minimum width.
+        - Scales the pen width by this ratio, the minimum pen width, and the current pen width multiplier.
+        - Updates the internal annotation pen's width accordingly for consistent drawing thickness.
+        
+        This method ensures the pen thickness scales appropriately during window resizing or zooming.
         """
         widget_minimum_width = self.minimumWidth()
         if widget_minimum_width:
@@ -1025,14 +1259,16 @@ class ImageAnnotator(QWidget):
     
     def resizeEvent(self, event):
         """
-        Handle window resize events.
+        Handle the widget resize event.
         
-        - Sets the initial minimum widget size based on the first resize.
-        - Rescales the image display to match the new widget size.
-        - Starts a timer to schedule an optimized resize update routine.
+        - Sets a flag indicating that a resize is currently occurring to omit the possibility of IndexError if the cursor hovers outside the image (QPixmap) awaiting to be resized.
+        - If the minimum widget size hasn't been set yet, sets it to the current size to prevent shrinking below this size.
+        - Resizes the internal image display widget to match the new size.
+        - Starts a timer (`__resize_scheduler`) to delay handling of the resize, allowing batch processing after resizing is complete.
+        - Accepts the event to mark it as handled.
         
         Args:
-            event (QResizeEvent): The resize event object containing new size info.
+            event (QResizeEvent): The resize event containing size change information.
         """
         self.__resize_flag = True
         if not self.__minimum_widget_size_set:
@@ -1044,22 +1280,19 @@ class ImageAnnotator(QWidget):
     
     def wheelEvent(self, event):
         """
-        Handles mouse wheel events to modify either label selection or pen width, 
-        depending on the current mode.
+        Handle mouse wheel scrolling to adjust label selection or pen width.
         
-        Behavior:
-        - If erasing and label slider mode are both active, then label slider mode is disabled 
-        (only cursor size can be varied using the mouse wheel).
-        - If label slider mode is enabled:
-            - Adjusts the label index accumulator based on the wheel direction and sensitivity.
+        - If currently in erasing mode and the label slider is enabled, disables the label slider.
+        - Reads the vertical scroll delta from the event.
+        - If the label slider is enabled:
+            - Adjusts the label index accumulator by a fixed sensitivity step in the scroll direction.
         - Otherwise:
-            - Adjusts the pen width accumulator based on the wheel direction and sensitivity.
+            - Adjusts the pen width multiplier accumulator similarly.
+        - Updates the pen tracer overlay and refreshes the combined image display.
+        - Updates the label display contents to reflect changes.
         
-        After handling the wheel input, this method updates the pen tracer overlay, 
-        refreshes the image display, and updates the label displays accordingly..
-        
-        Parameters:
-            event (QWheelEvent): The wheel event triggered by user input.
+        Args:
+            event (QWheelEvent): The wheel event with scrolling information.
         """
         if self.erasing and self.__label_slider_enabled:
                 self.__label_slider_enabled = False
@@ -1076,28 +1309,26 @@ class ImageAnnotator(QWidget):
     
     def mousePressEvent(self, event):
         """
-        Handles mouse press events to manage annotation drawing, erasing, and UI mode toggling.
+        Handle mouse button press events for annotation and mode toggling.
         
-        Behavior depends on the mouse button pressed:
-        - Left Button:
-            - If in erasing mode, attempts to remove the smallest annotation under the cursor.
-              If an annotation is removed:
-                - Retraces annotations.
-                - Updates the annotated label display.
-                - Optionally triggers autosave if enabled.
-            - Otherwise, draws a point annotation at the cursor position.
-            - In both cases, updates the combined image display.
+        Behavior:
+        - Updates the cursor position relative to the original image coordinates.
+        - Left-click:
+            - If erasing mode is active, attempts to remove the smallest annotation under the cursor,
+              retraces annotations, and updates the label display. Optionally autosaves changes.
+            - Draws a point at the cursor position on the drawing overlay.
+            - Refreshes the combined image display.
+        - Right-click:
+            - Toggles erasing mode on/off.
+            - Enables label slider mode.
+            - Updates pen tracer overlay and combined image display.
+            - Updates label display contents.
+        - Middle-click:
+            - Toggles label slider mode on/off.
+            - Updates pen tracer overlay and combined image display.
         
-        - Right Button:
-            - Toggles the erasing mode and enables label slider mode.
-            - Updates the pen tracer overlay and refreshes the image and the contents of label displays.
-        
-        - Middle Button:
-            - Toggles the label slider mode (used for navigating label indices).
-            - Updates the pen tracer overlay and refreshes the image display.
-        
-        Parameters:
-            event (QMouseEvent): The mouse press event containing button and position data.
+        Args:
+            event (QMouseEvent): The mouse press event containing button and position info.
         """
         self.__update_yx_cursor_within_original_image(event.pos())
         if event.button() == Qt.LeftButton:
@@ -1122,6 +1353,17 @@ class ImageAnnotator(QWidget):
             self.__combine_layers_and_update_image_display()
             
     def __update_drawing_overlay(self):
+        """
+        Update the drawing overlay by scaling it to match the current image size.
+        
+        Behavior:
+        - If the drawing overlay already exists, it is scaled to the image size while maintaining aspect ratio,
+          using fast transformation for performance.
+        - If the drawing overlay does not exist, it is initialized fresh.
+        
+        Notes:
+        - Uses a class-private attribute check to determine overlay existence.
+        """
         if hasattr(self, f'_{self.__class__.__name__}__drawing_overlay'):
             self.__drawing_overlay = self.drawing_overlay.scaled(self.image.size(), Qt.KeepAspectRatio, Qt.FastTransformation)
         else:
@@ -1129,20 +1371,21 @@ class ImageAnnotator(QWidget):
             
     def __update_pen_tracer_overlay(self):
         """
-        Updates the pen tracer overlay used to visually indicate the pen position and size on the image.
+        Update the pen tracer overlay to show the current pen position and size.
     
-        Functionality:
-        - If no previous pen position is recorded, the method exits early.
-        - Initializes a transparent QPixmap the same size as the image to serve as the overlay.
-        - If in erasing mode, the overlay is left blank and the method returns.
-        - Otherwise, draws a circle (tracer) at the last pen position to indicate where and how large 
-          the next annotation will be.
-            - If either of label slider or eraser modes is active, it uses a black pen for the tracer.
-            - Otherwise, it uses the current label color.
-        - The tracer's size reflects the current pen width adjusted by scaling factors.
-        
-        This method is called whenever visual feedback about the drawing tool is needed,
-        such as when the pen size or position changes.
+        Behavior:
+        - If no last pen position is recorded, the method returns early.
+        - Initializes the 'pen_tracer' overlay as a transparent QPixmap matching the image size.
+        - Creates a QPainter on the pen tracer overlay.
+        - Sets the pen color:
+            - Black if label slider is enabled or erasing mode is active.
+            - Otherwise, uses the color of the current label to annotate.
+        - Calculates an ellipse size based on the annotation pen width, scaled by pen width multiplier and UI scale factor.
+        - Draws an ellipse centered at the last pen position with the computed width.
+        - Ends the QPainter.
+    
+        Notes:
+        - The ellipse visually indicates the pen tip size and position on the annotation widget.
         """
         if self.__last_pen_position is None:
             return
@@ -1159,25 +1402,46 @@ class ImageAnnotator(QWidget):
         painter.end()
         
     def initialize_overlay(self, overlay_name:str):
+        """
+        Initialize a transparent QPixmap overlay for annotation layers.
+        
+        Args:
+            overlay_name (str): The name of the overlay to initialize. 
+                Must be one of: 'drawing', 'annotation', or 'pen_tracer'.
+        
+        Raises:
+            ValueError: If `overlay_name` is not one of the allowed strings.
+        
+        Behavior:
+            - Creates a new QPixmap matching the current image size.
+            - Fills the QPixmap with a transparent background.
+            - Assigns it to a private attribute named `__{overlay_name}_overlay`.
+        """
         if overlay_name not in {'drawing', 'annotation', 'pen_tracer'}:
-            raise ValueError("`overlay_name` should either be 'drawing' or 'annotation'")
+            raise ValueError("`overlay_name` should either be 'drawing', 'annotation', or 'pen_tracer'")
         attribute_name = f'_{self.__class__.__name__}__{overlay_name}_overlay'
         self.__dict__[attribute_name] = QPixmap(self.image.size())
         self.__dict__[attribute_name].fill(Qt.transparent)
         
     def mouseMoveEvent(self, event):
         """
-        Handles mouse movement events and updates the image display based on cursor position and button states.
-    
-        If the left mouse button is held down:
-            - If erasing is enabled, it attempts to drop the smallest annotation hovered over and retraces annotations.
-            - Otherwise, it draws a line based on the mouse movement.
-            - Combines layers and updates the image display.
-            
-        Additionally, updates the label displays and tracks the last position of the pen.
+        Handle mouse move events for drawing and erasing annotations.
+        
+        Behavior:
+        - If the widget is currently resizing (`__resize_flag`), ignores the event.
+        - Updates the cursor position relative to the original image.
+        - If the left mouse button is pressed:
+            - Draws a line from the last pen position to the current position.
+            - If in erasing mode, attempts to remove the smallest annotation hovered over,
+              retraces annotations, and autosaves if enabled.
+        - If the left button is not pressed, updates the label display contents.
+        - Updates the last pen position to the current position.
+        - Updates the pen tracer overlay.
+        - Combines all layers and refreshes the image display.
+        - Updates the positions of the label display widgets.
         
         Args:
-            event (QMouseEvent): The event object containing details about the mouse movement.
+            event (QMouseEvent): The mouse move event containing position and button state.
         
         Note: It is very necessary to apply this routine while the application is not resizing. Otherwise, an IndexError 
         exception could later occur due to the cursor (`self.__yx_cursor_within_original_image`) being mapped to outside 
@@ -1203,28 +1467,48 @@ class ImageAnnotator(QWidget):
         self.__update_positions_of_label_displays()
         
     def __update_yx_cursor_within_original_image(self, position:QPoint):
+        """
+        Update the cursor coordinates relative to the original image resolution.
+        
+        Behavior:
+        - Converts the given widget position (QPoint) to image coordinates by scaling down
+          according to the current scale factor.
+        - Stores the result as a tuple (y, x) to match image coordinate conventions.
+        - If position is None, resets cursor coordinates to (0, 0).
+        
+        Args:
+            position (QPoint | None): The current cursor position on the widget, or None.
+        """
         if position is None:
             self.__yx_cursor_within_original_image = (0, 0)
         else:
             self.__yx_cursor_within_original_image = (np.array([position.y(), position.x()]) / self.__scale_factor).astype(int)
         
-    def mouseDoubleClickEvent(self, event):        
+    def mouseDoubleClickEvent(self, event):
         """
-        Handles mouse double-click events, performing different actions based on the button pressed.
+        Handle double-click mouse events for annotation clearing or adding new annotations.
         
-        If the right mouse button is double-clicked:
-            - Prompts the user with a warning message asking for confirmation to clear annotations.
-            - If confirmed, clears all annotations and disables erasing mode.
-        
-        If the left mouse button is double-clicked and erasing is not active:
-            - Performs a flood-fill algorithm to locate all connected pixels starting from the double-clicked position.
-            - If bounding boxes are used, checks the size of the bounding box and adds it to the list if it meets the size thresholds.
-            - If bounding boxes are not used, creates and labels a segment mask, and adds it to the list of labelled segment masks.
-        
-        After updating annotations or segment masks, triggers the update routine and optionally saves the state if autosave is enabled.
+        Behavior:
+        - Right double-click:
+            - Prompts the user with a warning dialog to confirm clearing all annotations.
+            - If confirmed, clears all annotations and resets erasing mode.
+        - Left double-click (when not erasing):
+            - Performs a flood fill from the clicked position on the drawing overlay to find connected annotated pixels.
+            - If using bounding boxes:
+                - Converts the flood-filled mask to a bounding box, scales it to original image coordinates.
+                - Adds the new bounding box if it passes size thresholds.
+                - Cleans up overlapping bounding boxes based on configured thresholds.
+            - If using semantic segmentation:
+                - Resizes the flood-filled mask to original image size.
+                - Applies hole filling and label replacement to create a labelled segment mask.
+                - Prepends the new segment mask to the existing labelled masks.
+        - After any update:
+            - Clears the drawing overlay.
+            - Updates the annotation UI.
+            - Autosaves if enabled.
         
         Args:
-            event (QMouseEvent): The event object containing details about the mouse double-click.
+            event (QMouseEvent): The double-click mouse event.
         """
         updated = False
         if event.button() == Qt.RightButton:
@@ -1243,14 +1527,15 @@ class ImageAnnotator(QWidget):
                 x_offset, y_offset, width, height = (bounding_box / self.__scale_factor).astype('int32').tolist()
                 minimum_side_length, maximum_side_length = min(width, height), max(width, height)
                 lower_side_length_bound, upper_side_length_bound = self.__bounding_box_side_length_thresholds
-                if lower_side_length_bound <= minimum_side_length and maximum_side_length <= upper_side_length_bound:
+                if (lower_side_length_bound <= minimum_side_length and maximum_side_length <= upper_side_length_bound) or self.use_semantic_segments:
                     self.__bounding_boxes = np.concatenate([
                         self.bounding_boxes,
                         np.array([self.label_index_to_annotate, x_offset, y_offset, width, height])[np.newaxis, ...]
                     ])
-                boxes_to_remove_mask = detect_overlapping_boxes_to_clean(self.bounding_boxes, self.__overlap_vs_smallest_area_threshold, self.__overlap_vs_union_area_threshold)
-                self.__bounding_boxes = self.bounding_boxes[~boxes_to_remove_mask]
-            else:
+                if not self.use_semantic_segments:
+                    boxes_to_remove_mask = detect_overlapping_boxes_to_clean(self.bounding_boxes, self.__overlap_vs_smallest_area_threshold, self.__overlap_vs_union_area_threshold)
+                    self.__bounding_boxes = self.bounding_boxes[~boxes_to_remove_mask]
+            if self.use_semantic_segments:
                 segment_mask = resize(traversed_pixels_mask, self.__original_array_shape, 0)
                 segment_mask = binary_fill_holes(segment_mask).astype(int)
                 labelled_segment_mask = apply_lut_replacement(segment_mask, self.label_index_to_annotate)
@@ -1273,7 +1558,7 @@ class ImageAnnotator(QWidget):
         - Returns the indices of the detected boundary pixels.
     
         Returns:
-            tuple of np.ndarray: A tuple (row_indices, col_indices) representing the coordinates
+            tuple(np.ndarray): A tuple (row_indices, col_indices) representing the coordinates
                                  of the boundary pixels.
         """
         overall_mask = self.overall_segment_mask.copy()
