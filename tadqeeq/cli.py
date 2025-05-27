@@ -7,13 +7,18 @@ Licensed under the MIT License.
 
 from PyQt5.QtWidgets import QApplication
 import sys
-from argparse import ArgumentParser
+from argparse import ArgumentParser, RawTextHelpFormatter
 import os
 from .implementations import ImageAnnotatorWindow
 
 def main():
         
-    parser = ArgumentParser(description='Tadqeeq Image Annotation Tool\nUsage: tadqeeq [--void_background|--verbose|--autosave|--use_bounding_boxes]* --images <images_directory_path> --classes <class_names_filepath> --bounding-boxes <bounding_boxes_directory_path> --semantic-segments <semantic_segments_directory_path>')
+    parser = ArgumentParser(
+        description='Tadqeeq Image Annotation Tool',
+        epilog='Usage:\n'
+               '  tadqeeq (--void_background)? (--verbose)? (--autosave)? (--use_bounding_boxes)? --images <images_directory_path> --classes <class_names_filepath> (--bounding-boxes <bounding_boxes_directory_path>)? (--semantic-segments <semantic_segments_directory_path>)?',
+        formatter_class=RawTextHelpFormatter
+    )
     
     parser.add_argument('--images', required=True, help='Directory path for images')
     parser.add_argument('--classes', required=True, help='Text filepath for class names separated by newline characters')
