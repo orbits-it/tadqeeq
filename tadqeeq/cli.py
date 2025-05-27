@@ -15,11 +15,7 @@ def main():
         
     parser = ArgumentParser(
         description='Tadqeeq Image Annotation Tool',
-        usage="tadqeeq [--void_background] [--verbose] [--autosave] [--use_bounding_boxes]\n\
-            --images <images_directory_path>\n--classes <class_names_filepath>\n\
-            [--bounding-boxes <bounding_boxes_directory_path>] \
-            [--semantic-segments <semantic_segments_directory_path>]\n\
-            Note:\n\tAt least one of --bounding-boxes or --semantic-segments must be provided.",
+        usage="tadqeeq [--void_background] [--verbose] [--autosave] [--use_bounding_boxes]\n--images <images_directory_path>\n--classes <class_names_filepath>\n[--bounding-boxes <bounding_boxes_directory_path>] [--semantic-segments <semantic_segments_directory_path>]\nNote:\n\tAt least one of --bounding-boxes or --semantic-segments must be provided.",
         formatter_class=RawTextHelpFormatter
     )
     
