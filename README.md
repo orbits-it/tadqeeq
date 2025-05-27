@@ -49,10 +49,10 @@ pip install -r requirements.txt
 ### Import in your code:
 
 ```python
-from tadqeeq import ImageAnnotator
+from tadqeeq.widgets import ImageAnnotator
 ```
 ```python
-from tadqeeq import ImageAnnotatorWindow
+from tadqeeq.implementations import ImageAnnotatorWindow
 ```
 
 ### Run CLI tool from command line (if installed via pip):
