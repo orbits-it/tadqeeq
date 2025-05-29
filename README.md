@@ -79,16 +79,17 @@ tadqeeq [--void_background] [--verbose] [--autosave] [--use_bounding_boxes] --im
 
 ## 🧭 Controls
 
-| Action                  | Mouse/Key |
-|-------------------------|-----------|
-| Draw / Fill segment     | Left-click / double-click |
-| Erase (one object)      | Right-click + Left-click |
-| Toggle erase mode       | Right-click |
-| Clear all               | Double right-click |
-| Scroll through labels / Adjust cursor size   | Mouse wheel |
-| Save annotations        | Ctrl+S |
-| Show label on hover     | Hover cursor |
-| Navigate through images (CLI only) | A / D |
+| Action                                     | Mouse / Key                      |
+| ------------------------------------------ | -------------------------------- |
+| Toggle erase mode                          | Right-click                      |
+| Draw / Erase                               | Left-click / Drag                |
+| Mark Bounding Box / Semantic Segment       | Double left-click (drawing mode) |
+| Clear all                                  | Double right-click               |
+| Toggle slider mode                         | Wheel-click                      |
+| Slide through label classes / Brush widths | Scroll wheel                     |
+| Save manually                              | Ctrl + S                         |
+| Reveal annotated segment's label name      | Move cursor over annotation      |
+| Navigate between images                    | A / D (keyboard)                 |
 
 ---
 
@@ -100,8 +101,12 @@ root/
 |   ├── __init__.py         # Entry point for importing
 |   ├── widgets.py          # Contains ImageAnnotator class
 |   ├── utils.py            # Helper methods (flood fill, bounding box logic)
-|   ├── implementations.py  # Contains a working example of integrating the ImageAnnotator class within a full minimalist setup
-|   ├── cli.py              # Entry point for a full annotation solution utilizing the code in `implementations.py`
+|   |
+|   ├── implementations.py  # Provides a complete, minimal working example of how to integrate the ImageAnnotator 
+│   │                       # within an annotation pipeline. These implementation objects are intended to be 
+│   │                       # used as-is and should not be modified directly in other applications.
+|   |
+|   └── cli.py              # Entry point for a full annotation solution utilizing the code in `implementations.py`
 ├── README.md
 ├── LICENSE
 ├── setup.py

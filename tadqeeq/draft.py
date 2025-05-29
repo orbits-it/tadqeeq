@@ -663,16 +663,20 @@ class ImageAnnotator(QWidget):
     @labelled_segment_masks.setter
     def labelled_segment_masks(self, value:np.ndarray):
         """
-        Set the labelled segment masks and update the combined segment mask.
+        Set the labelled segment masks and update the combined overlay.
         
-        This setter:
-        - Accepts a 3D numpy array representing the labelled segment masks.
-        - Combines the sorted segment masks into a single overall mask.
+        - Sorts masks by ascending area to prioritize smaller segments.
+        - Synchronizes bounding boxes if active.
+        - Recomputes the combined overall segment mask.
         
         Args:
-            value (np.ndarray): 3D array containing the labelled segment masks.
+            value (np.ndarray): A 3D array of shape (N, H, W), where each slice is a labelled mask.
         """
-        self.__labelled_segment_masks = value
+        segment_areas = (value != 255).sum(axis=(1,2))
+        sorted_area_indices = np.argsort(segment_areas)
+        self.__labelled_segment_masks = value[sorted_area_indices]
+        if self.use_bounding_boxes:
+            self.__bounding_boxes = self.__bounding_boxes[sorted_area_indices]
         self.__overall_segment_mask = self.__combine_labelled_segment_masks()
     
     @property
