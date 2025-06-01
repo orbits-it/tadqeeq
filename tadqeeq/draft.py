@@ -1601,7 +1601,7 @@ class ImageAnnotator(QWidget):
 # %% Local static utilities bundled below
 
 class EmptyDatasetError(FileNotFoundError):
-    def __init__(self, message):
+    def __init__(self, message=''):
         super().__init__(message)
 
 class Helper:
@@ -1972,7 +1972,6 @@ class MainWindow(QMainWindow):
         self.image_navigation_keys = image_navigation_keys
         
         self.setWindowFlag(Qt.WindowMaximizeButtonHint, False)
-        self.setWindowTitle('Tadqeeq - a Minimalist Image Annotator')
         self.setCentralWidget(self.__image_annotator)
         
     @property
@@ -2175,7 +2174,7 @@ class MainWindow(QMainWindow):
             - Calls the internal method to update the image annotator accordingly.
         """
         self.__image_index = value
-        self.__current_image_filepath = self.image_filepaths[value]
+        self.current_image_filepath = self.image_filepaths[value]
         if hasattr(self, f'_{self.__class__.__name__}__bounding_boxes_filepaths'):
             self.__current_bounding_boxes_filepath = self.bounding_boxes_filepaths[value]
         if hasattr(self, f'_{self.__class__.__name__}__semantic_segments_filepaths'):
@@ -2210,6 +2209,11 @@ class MainWindow(QMainWindow):
             str: Filepath of the current image.
         """
         return self.__current_image_filepath
+
+    @current_image_filepath.setter
+    def current_image_filepath(self, value:str):
+        self.__current_image_filepath = value
+        self.setWindowTitle(f'Tadqeeq - Image Annotator\t\t|\t{os.path.basename(value)}')
     
     @property
     def current_bounding_boxes_filepath(self):

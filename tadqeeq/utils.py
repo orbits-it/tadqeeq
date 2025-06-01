@@ -12,7 +12,7 @@ from itertools import combinations
 import os
 
 class EmptyDatasetError(FileNotFoundError):
-    def __init__(self, message):
+    def __init__(self, message=''):
         super().__init__(message)
 
 def compute_segment_areas(labelled_segment_masks):
