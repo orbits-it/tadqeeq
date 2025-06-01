@@ -99,7 +99,7 @@ class ImageAnnotatorWindow(QMainWindow):
         self.__images_directory_path = value
         self.__image_filepaths = get_pixmap_compatible_image_filepaths(value)
         if len(self.__image_filepaths) == 0:
-            raise EmptyDatasetError()
+            raise EmptyDatasetError(f'The folder "{value}" has no compatible image files.')
         
     @property
     def bounding_boxes_directory_path(self):

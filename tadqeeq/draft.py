@@ -2003,7 +2003,7 @@ class MainWindow(QMainWindow):
         self.__images_directory_path = value
         self.__image_filepaths = Helper.get_pixmap_compatible_image_filepaths(value)
         if len(self.__image_filepaths) == 0:
-            raise EmptyDatasetError()
+            raise EmptyDatasetError(f'The folder "{value}" has no compatible image files.')
         
     @property
     def bounding_boxes_directory_path(self):
@@ -2255,7 +2255,7 @@ class MainWindow(QMainWindow):
         
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    images_directory_path = '/home/mohamed/Projects/segmentation_annotation_tool/'
+    images_directory_path = '/home/mohamed/Projects/segmentation_annotation_tool/gui/Tadqeeq - Image Annotator/'
     bounding_boxes_directory_path = '/home/mohamed/Projects/segmentation_annotation_tool/bounding_boxes/'
     semantic_segments_directory_path = '/home/mohamed/Projects/segmentation_annotation_tool/semantic_segments/'
     window = MainWindow(
