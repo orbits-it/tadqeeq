@@ -19,7 +19,7 @@ Features:
 """
 
 from PyQt5.QtWidgets import QWidget, QLabel, QApplication, QMainWindow, QMessageBox, QShortcut
-from PyQt5.QtGui import QPixmap, QPainter, QPen, QColor, QBrush, QKeySequence, QFont, QImage
+from PyQt5.QtGui import QPixmap, QPainter, QPen, QColor, QBrush, QKeySequence, QFont, QImage, QFontMetrics
 from PyQt5.QtCore import Qt, QTimer, QRect, QPoint
 import sys
 import numpy as np
@@ -1186,7 +1186,7 @@ class ImageAnnotator(QWidget):
         else:
             text = self.labels[label_index]
             background_color = self.label_colors[label_index].name()
-        maximum_text_length = reduce(lambda a, b: max(len(str(a)), len(str(b))), self.labels + ['N/A'])
+        maximum_text_length = max(map(len, self.labels + ['N/A']))
         label_display.setText(f'Label: {text:<{maximum_text_length}}')
         label_display.setStyleSheet(f'background: {background_color}; border: 1px solid black; padding: 2px;')
         
@@ -1227,7 +1227,12 @@ class ImageAnnotator(QWidget):
         self.__configure_label_display(self.__label_to_annotate_display, self.label_index_to_annotate, False)
         self.__configure_label_display(self.__label_annotated_display, self.__label_index_hovered_over, True)
         if not self.__label_displays_configuration_complete:
-            common_width = max(self.__label_to_annotate_display.width(), self.__label_annotated_display.width()) - 25
+            font_metrics = QFontMetrics(self.__label_to_annotate_display.font())
+            text_width = font_metrics.horizontalAdvance(self.__label_to_annotate_display.text())
+            text_height = font_metrics.height()
+            self.__label_to_annotate_display.resize(text_width, text_height)
+            self.__label_annotated_display.resize(text_width, text_height)
+            common_width = max(self.__label_to_annotate_display.width(), self.__label_annotated_display.width()) + 14
             self.__label_to_annotate_display.setFixedWidth(common_width - 1)
             self.__label_annotated_display.setFixedWidth(common_width - 1)
             self.__label_displays_configuration_complete = True
@@ -2255,7 +2260,7 @@ class MainWindow(QMainWindow):
         
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    images_directory_path = '/home/mohamed/Projects/segmentation_annotation_tool/gui/Tadqeeq - Image Annotator/'
+    images_directory_path = '/home/mohamed/Projects/segmentation_annotation_tool/images/'
     bounding_boxes_directory_path = '/home/mohamed/Projects/segmentation_annotation_tool/bounding_boxes/'
     semantic_segments_directory_path = '/home/mohamed/Projects/segmentation_annotation_tool/semantic_segments/'
     window = MainWindow(
@@ -2263,7 +2268,7 @@ if __name__ == '__main__':
         bounding_boxes_directory_path,
         semantic_segments_directory_path,
         void_background=False,
-        label_color_pairs=['0a','1','2','3']
+        label_color_pairs=['0agfsdghashddfhadfhhhhhhhhhh','1','2','3']
     )
     window.show()
     sys.exit(app.exec_())
