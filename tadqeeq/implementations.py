@@ -10,7 +10,7 @@ from PyQt5.QtCore import Qt, QTimer
 import os
 from collections.abc import Iterable
 from .widgets import ImageAnnotator
-from .utils import get_pixmap_compatible_image_filepaths
+from .utils import get_pixmap_compatible_image_filepaths, EmptyDatasetError
 
 class ImageAnnotatorWindow(QMainWindow):
     """
@@ -99,6 +99,8 @@ class ImageAnnotatorWindow(QMainWindow):
             raise ValueError('`images_directory_path` should refer to a directory.')
         self.__images_directory_path = value
         self.__image_filepaths = get_pixmap_compatible_image_filepaths(value)
+        if len(self.__image_filepaths) == 0:
+            raise EmptyDatasetError()
         
     @property
     def bounding_boxes_directory_path(self):

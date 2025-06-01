@@ -11,6 +11,10 @@ from collections import deque
 from itertools import combinations
 import os
 
+class EmptyDatasetError(FileNotFoundError):
+    def __init__(self, message):
+        super().__init__(message)
+
 def compute_segment_areas(labelled_segment_masks):
     """
     Compute the pixel area of each individual mask in a stack of labelled segment masks.

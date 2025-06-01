@@ -1600,6 +1600,10 @@ class ImageAnnotator(QWidget):
         return overall_segment_mask_to_save
 # %% Local static utilities bundled below
 
+class EmptyDatasetError(FileNotFoundError):
+    def __init__(self, message):
+        super().__init__(message)
+
 class Helper:
     
     def __new__(cls, *args, **kwargs):
@@ -1999,6 +2003,8 @@ class MainWindow(QMainWindow):
             raise ValueError('`images_directory_path` should refer to a directory.')
         self.__images_directory_path = value
         self.__image_filepaths = Helper.get_pixmap_compatible_image_filepaths(value)
+        if len(self.__image_filepaths) == 0:
+            raise EmptyDatasetError()
         
     @property
     def bounding_boxes_directory_path(self):
@@ -2245,7 +2251,7 @@ class MainWindow(QMainWindow):
         
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    images_directory_path = '/home/mohamed/Projects/segmentation_annotation_tool/images/'
+    images_directory_path = '/home/mohamed/Projects/segmentation_annotation_tool/'
     bounding_boxes_directory_path = '/home/mohamed/Projects/segmentation_annotation_tool/bounding_boxes/'
     semantic_segments_directory_path = '/home/mohamed/Projects/segmentation_annotation_tool/semantic_segments/'
     window = MainWindow(
