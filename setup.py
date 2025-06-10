@@ -12,7 +12,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="tadqeeq",
-    version="1.11.10",
+    version="1.11.11",
     author="Mohamed Behery",
     author_email="mohamed.i.behery@proton.me",
     description="An interactive PyQt5 image annotation tool for segmentation masks and bounding boxes.",
@@ -29,9 +29,9 @@ setup(
         "numpy==2.2.5",
         "packaging==25.0",
         "pillow==11.2.1",
-        "PyQt5==5.15.11",
-        "PyQt5-Qt5==5.15.16",
-        "PyQt5_sip==12.17.0",
+        "PyQt5>=5.15.0,<6.0",
+        "PyQt5-Qt5>=5.15.0,<6.0",
+        "PyQt5_sip>=12.17,<13.0",
         "scikit-image==0.25.2",
         "scipy==1.15.2",
         "tifffile==2025.3.30",
