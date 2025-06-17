@@ -60,7 +60,7 @@ class Application(QApplication):
             'semantic_segments_directory_path' : self.configuration_window.paths_groupbox.view_model.model.semantic_segments,
             'void_background'                  : self.configuration_window.flags_groupbox.view_model.model.void_background,
             'autosave'                         : self.configuration_window.flags_groupbox.view_model.model.autosave,
-            'label_color_pairs'                : self.configuration_window.classes_groupbox.view_model.model.names,
+            'label_color_pairs'                : self.configuration_window.classes_groupbox.components['classnames_table'].names,
         }
 
 if __name__ == '__main__':

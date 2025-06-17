@@ -38,13 +38,20 @@ class ViewModel(QObject):
     def names(self, value:list[str]):
         if self.model.names != value:
             self.model.names = value
+            self.names_changed.emit(value)
             self.configuration_file_parser[ConfigurationKeys.Classes.SECTION][ConfigurationKeys.Classes.NAMES] = '\n'.join(value)
             self.configuration_file_parser.writeback_changes_to_disk()
-            self.names_changed.emit(value)
     
-    def on_edit(self, item):
-        index, text = item.row(), item.text()
-        if not text.strip() or text == self.names[index]:
-            return
-        new_names = self.names.copy(); new_names[index] = text
+    def on_edit(self, index, text):#???
+        text = text.strip()
+        new_names = self.names.copy()
+        if index < len(new_names):
+            if text == self.names[index]:
+                return False
+            new_names[index] = text
+        else:
+            new_names.append(text)
         self.names = new_names
+        return True
+        
+        
