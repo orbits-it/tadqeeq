@@ -1216,16 +1216,17 @@ class ImageAnnotator(QWidget):
         self.__label_index_hovered_over = self.__get_label_index_hovered_over()
         self.__configure_label_display(self.__label_to_annotate_display, self.label_index_to_annotate, False)
         self.__configure_label_display(self.__label_annotated_display, self.__label_index_hovered_over, True)
-        if not self.__label_displays_configuration_complete:
-            font_metrics = QFontMetrics(self.__label_to_annotate_display.font())
-            text_width = font_metrics.horizontalAdvance(self.__label_to_annotate_display.text())
-            text_height = font_metrics.height()
-            self.__label_to_annotate_display.resize(text_width, text_height)
-            self.__label_annotated_display.resize(text_width, text_height)
-            common_width = max(self.__label_to_annotate_display.width(), self.__label_annotated_display.width()) + 14
-            self.__label_to_annotate_display.setFixedWidth(common_width - 1)
-            self.__label_annotated_display.setFixedWidth(common_width - 1)
-            self.__label_displays_configuration_complete = True
+        
+        #if not self.__label_displays_configuration_complete:
+        font_metrics = QFontMetrics(self.__label_to_annotate_display.font())
+        text_to_annotate_width = font_metrics.horizontalAdvance(self.__label_to_annotate_display.text())
+        text_annotated_width = font_metrics.horizontalAdvance(self.__label_annotated_display.text())
+        common_width = max(text_to_annotate_width, text_annotated_width)
+        text_height = font_metrics.height()
+        
+        self.__label_to_annotate_display.setFixedSize(common_width, text_height)
+        self.__label_annotated_display.setFixedSize(common_width, text_height)
+        self.__label_displays_configuration_complete = True
             
     def __update_label_displays(self):
         """
