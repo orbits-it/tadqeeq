@@ -7,15 +7,16 @@ Created on Wed Aug  6 14:57:06 2025
 """
 
 from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QPushButton,
-    QLineEdit, QCheckBox, QTableWidget, QTableWidgetItem, QHeaderView,
-    QLabel, QSizePolicy, QFileDialog,
+    QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QPushButton, QLineEdit,
+    QCheckBox, QTableWidget, QTableWidgetItem, QHeaderView, QFileDialog,
+    QDesktopWidget, QMessageBox, 
 )
-from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QIcon
 from viewmodel import ViewModel
 from helper import INIParser
 from tadqeeq.implementations import ImageAnnotatorWindow
+from tadqeeq.utils import EmptyDatasetError
 
 class PathLayout(QHBoxLayout):
     def __init__(self, hint):
@@ -63,25 +64,40 @@ class SingleColumnTable(QTableWidget):
         for idx in range(n):
             item = QTableWidgetItem(items[idx]) if idx < n - 1 else QTableWidgetItem('')
             self.setItem(idx, 0, item)
+        self.setVerticalHeaderLabels([str(idx+1) for idx in range(n-1)] + [''])
         self.blockSignals(False)
     
     def get_contents(self):
         n = self.rowCount()
         items = []
         for idx in range(n):
-            item_text = self.item(idx, 0).text().strip()
+            item = self.item(idx, 0)
+            if item is None:
+                continue
+            item_text = item.text().strip()
             if item_text:
                 items.append(item_text)
         return items
+    
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_Delete:
+            for selection in self.selectedRanges():
+                for idx in reversed(range(selection.topRow(), selection.bottomRow() + 1)):
+                    self.setItem(idx, 0, None)
+            self.set_contents(self.get_contents())
+            self.clearSelection()
+        else:
+            super().keyPressEvent(event)
 
 class View(QWidget):
-    def __init__(self, viewmodel:ViewModel):
-        super().__init__()
+    def __init__(self, parent, viewmodel:ViewModel):
+        super().__init__(parent)
         self.viewmodel = viewmodel
         self.init_ui()
         self.bind_viewmodel()
 
     def init_ui(self):
+        
         self.setWindowTitle("Annotator Configuration")
         self.resize(560, 680)
         self.setStyleSheet("""
@@ -158,9 +174,6 @@ class View(QWidget):
         self.classnames_table.horizontalHeader().setStretchLastSection(True)
         self.classnames_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         
-        # Remove vertical header
-        self.classnames_table.verticalHeader().setVisible(False)
-        
         # Minimum row height
         self.classnames_table.verticalHeader().setDefaultSectionSize(28)
 
@@ -194,6 +207,18 @@ class View(QWidget):
         
         self.setLayout(self.main_layout)
         
+        self.move_to_center_of_parent()
+        
+    def move_to_center_of_parent(self):
+        parent = self.parent()
+        if parent:
+            parent_center = parent.frameGeometry().center()
+        else:
+            parent_center = QDesktopWidget().availableGeometry().center()
+        frame = self.frameGeometry()
+        frame.moveCenter(parent_center)
+        self.move(frame.topLeft())
+    
     def bind_viewmodel(self):
         
         def bind_widget_to_setter(widget, setter):
@@ -248,8 +273,16 @@ class View(QWidget):
         self.classnames_table.set_contents(self.viewmodel.classnames)
         
     def submit(self):
-        self.write_config()
-        self.start_annotator()
+# =============================================================================
+#         try:
+# =============================================================================
+            self.start_annotator()
+            self.write_config()
+# =============================================================================
+#         except Exception as e:
+#             mbox = QMessageBox.critical(self, 'Error', str(e))
+#             mbox.exec()
+# =============================================================================
         
     def write_config(self):
         parser = INIParser()
@@ -263,13 +296,14 @@ class View(QWidget):
         
     def start_annotator(self):
         self.annotator_window = ImageAnnotatorWindow(
+            parent                           = self,
             images_directory_path            = self.viewmodel.images,
             bounding_boxes_directory_path    = self.viewmodel.bounding_boxes,
             semantic_segments_directory_path = self.viewmodel.semantic_segments,
             void_background                  = self.viewmodel.void_background,
             autosave                         = self.viewmodel.autosave,
             label_color_pairs                = self.viewmodel.classnames,
-            verbose = False,
+            verbose                          = False,
         )
         self.hide()
         self.annotator_window.show()

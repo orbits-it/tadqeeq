@@ -5,12 +5,12 @@ Developed by Mohamed Behery @ RTR Software Development (2025-04-27).
 Licensed under the MIT License.
 """
 
-from PyQt5.QtWidgets import QMainWindow
+from PyQt5.QtWidgets import QMainWindow, QDesktopWidget
 from PyQt5.QtCore import Qt, QTimer
 import os
 from collections.abc import Iterable
-from .widgets import ImageAnnotator
-from .utils import get_pixmap_compatible_image_filepaths, EmptyDatasetError
+from tadqeeq.widgets import ImageAnnotator
+from tadqeeq.utils import get_pixmap_compatible_image_filepaths, EmptyDatasetError
 
 class ImageAnnotatorWindow(QMainWindow):
     """
@@ -30,6 +30,7 @@ class ImageAnnotatorWindow(QMainWindow):
         **image_annotator_kwargs: Additional keyword arguments passed to the ImageAnnotator.
     """
     def __init__(self,
+                 parent,
                  images_directory_path,
                  bounding_boxes_directory_path,
                  semantic_segments_directory_path,
@@ -56,7 +57,7 @@ class ImageAnnotatorWindow(QMainWindow):
             self.__resize_scheduler.setSingleShot(True)
             self.__resize_scheduler.timeout.connect(self.__resize_user_interface_update_routine)
         
-        super().__init__()
+        super().__init__(parent)
         
         initialize_image_filepaths()
         initialize_annotation_filepaths()
@@ -69,6 +70,17 @@ class ImageAnnotatorWindow(QMainWindow):
         
         self.setWindowFlag(Qt.WindowMaximizeButtonHint, False)
         self.setCentralWidget(self.__image_annotator)
+        self.move_to_center_of_parent()
+        
+    def move_to_center_of_parent(self):
+        parent = self.parent()
+        if parent:
+            parent_center = parent.frameGeometry().center()
+        else:
+            parent_center = QDesktopWidget().availableGeometry().center()
+        frame = self.frameGeometry()
+        frame.moveCenter(parent_center)
+        self.move(frame.topLeft())
         
     @property
     def images_directory_path(self):
@@ -95,7 +107,7 @@ class ImageAnnotatorWindow(QMainWindow):
             ValueError: If the provided path is not a valid directory.
         """
         if not os.path.isdir(value):
-            raise ValueError('`images_directory_path` should refer to a directory.')
+            raise ValueError(f'The directory "{value}" does not exist.')
         self.__images_directory_path = value
         self.__image_filepaths = get_pixmap_compatible_image_filepaths(value)
         if len(self.__image_filepaths) == 0:
@@ -121,6 +133,7 @@ class ImageAnnotatorWindow(QMainWindow):
             value (str): Path to the directory containing bounding box `.txt` files.
         """
         self.__bounding_boxes_directory_path = value
+        os.makedirs(value, exist_ok=True)
         if value:
             self.__bounding_boxes_filepaths = list(
                 map(lambda x: self.__image_filepath_to_annotation_filepath(x, value, '.txt'), self.image_filepaths)
@@ -146,6 +159,7 @@ class ImageAnnotatorWindow(QMainWindow):
             value (str): The path to the semantic segments directory.
         """
         self.__semantic_segments_directory_path = value
+        os.makedirs(value, exist_ok=True)
         if value:
             self.__semantic_segments_filepaths = list(
                 map(lambda x: self.__image_filepath_to_annotation_filepath(x, value, '.png'), self.image_filepaths)
@@ -348,4 +362,11 @@ class ImageAnnotatorWindow(QMainWindow):
         Resize the user interface widget to match the size of the image annotator widget.
         """
         self.resize(self.__image_annotator.size())
+        
+    def closeEvent(self, event):
+        self.destroy()
+        parent = self.parent()
+        if parent and parent.isHidden():
+            parent.show()
+        event.accept()
             

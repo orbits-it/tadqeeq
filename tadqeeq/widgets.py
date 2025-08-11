@@ -17,10 +17,10 @@ from skimage.transform import resize
 from skimage.feature import canny
 from scipy.ndimage import binary_fill_holes
 
-from .utils import compute_segment_areas, rgba_array_to_pixmap, \
-                   apply_lut_replacement, detect_overlapping_boxes_to_clean, \
-                   mask_to_bounding_box, pixmap_to_rgba_array, \
-                   locate_all_pixels_via_floodfill
+from tadqeeq.utils import compute_segment_areas, rgba_array_to_pixmap, \
+                  apply_lut_replacement, detect_overlapping_boxes_to_clean, \
+                  mask_to_bounding_box, pixmap_to_rgba_array, \
+                  locate_all_pixels_via_floodfill
                   
 from warnings import filterwarnings
 filterwarnings('ignore', category=UserWarning, message='.*low contrast image.*')
@@ -111,7 +111,6 @@ class ImageAnnotator(QWidget):
             self.__minimum_widget_size_set = False
             self.floating_label_display_offsets = floating_label_display_offsets
             self.__label_index_hovered_over = -1
-            self.__label_displays_configuration_complete = False
             
         def initialize_annotation_pen():
             nonlocal self, minimum_pen_width
@@ -590,6 +589,7 @@ class ImageAnnotator(QWidget):
         """
         self.__image = value
         self.__original_array_shape = [value.height(), value.width()]
+        self.__overall_segment_mask = np.zeros(self.__original_array_shape, dtype='uint8') + 255 if self.void_background else 0
         if value.isNull():
             blank_image = QPixmap(self.size())
             blank_image.fill(Qt.white)
@@ -665,7 +665,7 @@ class ImageAnnotator(QWidget):
         segment_areas = (value != 255).sum(axis=(1,2))
         sorted_area_indices = np.argsort(segment_areas)
         self.__labelled_segment_masks = value[sorted_area_indices]
-        if self.use_bounding_boxes:
+        if self.use_bounding_boxes and self.__bounding_boxes.size:
             self.__bounding_boxes = self.__bounding_boxes[sorted_area_indices]
         self.__overall_segment_mask = self.__combine_labelled_segment_masks()
     
@@ -1217,16 +1217,20 @@ class ImageAnnotator(QWidget):
         self.__configure_label_display(self.__label_to_annotate_display, self.label_index_to_annotate, False)
         self.__configure_label_display(self.__label_annotated_display, self.__label_index_hovered_over, True)
         
-        #if not self.__label_displays_configuration_complete:
+        self.__label_to_annotate_display.adjustSize()
+        self.__label_annotated_display.adjustSize()
+        
         font_metrics = QFontMetrics(self.__label_to_annotate_display.font())
         text_to_annotate_width = font_metrics.horizontalAdvance(self.__label_to_annotate_display.text())
         text_annotated_width = font_metrics.horizontalAdvance(self.__label_annotated_display.text())
-        common_width = max(text_to_annotate_width, text_annotated_width)
-        text_height = font_metrics.height()
+        common_text_width = max(text_to_annotate_width, text_annotated_width)
+        common_text_height = font_metrics.height()
+        margins = self.__label_to_annotate_display.contentsMargins()
+        common_text_width += (margins.left() + margins.right()) * 2
+        common_text_height += (margins.top() + margins.bottom()) * 1
         
-        self.__label_to_annotate_display.setFixedSize(common_width, text_height)
-        self.__label_annotated_display.setFixedSize(common_width, text_height)
-        self.__label_displays_configuration_complete = True
+        self.__label_to_annotate_display.setFixedSize(common_text_width, common_text_height)
+        self.__label_annotated_display.setFixedSize(common_text_width, common_text_height)
             
     def __update_label_displays(self):
         """

@@ -25,7 +25,7 @@ def main():
         classnames        = config.getlist('Classes', 'names'),
     )
     viewmodel = ViewModel(model)
-    view = View(viewmodel)
+    view = View(None, viewmodel)
     
     view.show()
     return app.exec()
