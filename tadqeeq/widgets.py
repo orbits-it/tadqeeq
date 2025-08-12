@@ -589,7 +589,6 @@ class ImageAnnotator(QWidget):
         """
         self.__image = value
         self.__original_array_shape = [value.height(), value.width()]
-        self.__overall_segment_mask = np.zeros(self.__original_array_shape, dtype='uint8') + 255 if self.void_background else 0
         if value.isNull():
             blank_image = QPixmap(self.size())
             blank_image.fill(Qt.white)

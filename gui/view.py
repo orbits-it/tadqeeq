@@ -16,9 +16,10 @@ from PyQt5.QtGui import QIcon
 from viewmodel import ViewModel
 from helper import INIParser
 from tadqeeq.implementations import ImageAnnotatorWindow
-from tadqeeq.utils import EmptyDatasetError
+from time import sleep
 
 class PathLayout(QHBoxLayout):
+    
     def __init__(self, hint):
         super().__init__()
         self.hint = hint
@@ -90,6 +91,9 @@ class SingleColumnTable(QTableWidget):
             super().keyPressEvent(event)
 
 class View(QWidget):
+    
+    ANNOTATOR_SCALE = 1.5
+    
     def __init__(self, parent, viewmodel:ViewModel):
         super().__init__(parent)
         self.viewmodel = viewmodel
@@ -273,16 +277,12 @@ class View(QWidget):
         self.classnames_table.set_contents(self.viewmodel.classnames)
         
     def submit(self):
-# =============================================================================
-#         try:
-# =============================================================================
+        try:
             self.start_annotator()
             self.write_config()
-# =============================================================================
-#         except Exception as e:
-#             mbox = QMessageBox.critical(self, 'Error', str(e))
-#             mbox.exec()
-# =============================================================================
+        except Exception as e:
+            mbox = QMessageBox.critical(self, 'Error', str(e))
+            mbox.exec()
         
     def write_config(self):
         parser = INIParser()
@@ -305,6 +305,11 @@ class View(QWidget):
             label_color_pairs                = self.viewmodel.classnames,
             verbose                          = False,
         )
-        self.hide()
+        annotator_size = self.annotator_window.size()
+        w, h = map(lambda d: int(self.ANNOTATOR_SCALE * d), 
+                   [annotator_size.width(), annotator_size.height()])
+        self.annotator_window.resize(w, h)
+        self.annotator_window.move_to_center_of_parent()
         self.annotator_window.show()
+        self.hide()
         
