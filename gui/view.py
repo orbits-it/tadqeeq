@@ -16,7 +16,6 @@ from PyQt5.QtGui import QIcon
 from viewmodel import ViewModel
 from helper import INIParser
 from tadqeeq.implementations import ImageAnnotatorWindow
-from time import sleep
 
 class PathLayout(QHBoxLayout):
     
